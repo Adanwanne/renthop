@@ -5,6 +5,10 @@ date: "4/18/2017"
 output: html_document
 ---
 
+```{r loading packages}
+library(ggplot2)
+```
+
 ```{r reading files}
 renthop.tr <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_tr.csv')
 
@@ -24,55 +28,91 @@ train <- data.frame(renthop.tr[,-tofix], apply(renthop.tr[,tofix], 2, entry_fix)
 train <- train[,c(1, 7:10, 2:4, 11:12, 5:6, 13:15)]
 
 #Creating a numeric variable for 'photos'
-train$photos <- str_count(train$photos, ',') + 1
+train$photos <- ifelse(str_count(train$photos, ',') == 0, 0, str_count(train$photos, ',') + 1)
+
+#Creating a binary variable for 'photos'
+train$binary_photos <- factor(ifelse(train$photos == 0, 'No', 'Yes'))
 
 #Change 'created' to datetime format
 train$created <- as.POSIXct(train$created)
 
+#Exporting the dataframe to do some more data cleaning in Python
+write.csv(train, '/Users/adaezeajoku/Desktop/STATS415/Project/train.csv')
+
 #'description'
 toRemove <- c('<a', '<br />', '<br/>', '<p>', 'website_redacted ')
 train$description <- as.character(train$description)
-train$description <- str_replace_all(train$description, "<br />", "")
+train$description <- str_replace_all(train$description, "<br />", " ")
 train$description <- str_replace_all(train$description, "<br/>", " ")
-train$description <- str_replace_all(train$description, "<p>", "")
+train$description <- str_replace_all(train$description, "<p>", " ")
 train$description <- str_replace_all(train$description, "website_redacted ", "")
 
 # create regex to catch and remove img html like: <br><img src= \" width=\"1\" height=\"1\" /><ul><li><a target=_blank href= Robert Dillon for more information</a> </li><li><a target=_blank href= full listing information on elliman.com</a> </li></ul></p>
 
 ```
-#' Step 1: Do as much data exploration as possible by visualization, summary statistics and perhaps a more sophisticated dimensionality reduction method such as PCA and/or MDS. 
-#' 
 
-#' how much time is a posting live for interest_level to be gauged? 1 week? Are they still live?
+# Step 1: Exploratory Data Analysis
+Do as much data exploration as possible by visualization, summary statistics and perhaps a more sophisticated dimensionality reduction method such as PCA and/or MDS. 
 
-#' How many observations of each interest level are there?
-table(renthop.tr$interest_level)
-#' 7.8% high, 69.5% low, 22.8% medium
+```{r preliminary questions}
+#' (1) How much time is a posting live for interest_level to be gauged? 1 week? Are they still live?
+#Who knows? We can just assume they are still live. I do not think it will change our analysis or outcome.
 
-#' What is the distribution of price by interest level?
-boxplot(price~interest_level, data=renthop.tr) #eliminate outliers!
-tapply(renthop.tr$price, renthop.tr$interest_level, summary)
+#' (2) How many observations of each interest level are there?
+table(train$interest_level)
+#' 7.8% high (3839), 69.5% low (34284), 22.8% medium (11229)
+
+#' (3) What is the distribution of price by interest level?
+boxplot(price~interest_level, data=train) #eliminate outliers!
+tapply(train$price, train$interest_level, summary)
 #' mean prices: high = 2700.293, low=4176.599, medium=3158.767
 #' So people are more interested the lower the price.
 
-#' How many words are in the description for each interest_level?
+#' (4) How does price and interest_level relate to listing location?
+
+#' (5) Does no photo translate to low interest?
+table(train$interest_level[train$photos == 0])
+#' Yes 91.4% of the time.
+
+#' (6) How do number of photos relate to interest level?
+boxplot(photos~interest_level, data=train)
+# For all interest levels, the distribution of photos in the ad seems equal. So perhaps having photo be a binary variable is a better option?
+
 #' What is the lat/long for listings by interest_level? Are there clusters of regions by interest_level?
+ggplot(train) + geom_point(aes(interest_level, longitude/latitude)) + geom_jitter(width=0.5)
+
 #' Are there certain undesirable managers?
+head(table(train$manager_id)[order(table(train$manager_id), decreasing = T)])
+manager_feels <- data.frame(table(train$manager_id, train$interest_level))
+names(manager_feels) <- c('manager_id', 'interest_level', 'freq')
+manager_feels <- manager_feels[manager_feels$freq != 0, ]
+mean(manager_feels$freq)
+#Mean frequency for a manager is 8.6. Consider managers who have frequencies of 9 or greater.
+manager_feels <- manager_feels[manager_feels$freq >= 9, ]
+table(as.character(manager_feels$manager_id)) #use melt now? want to see how many frequency for each interest_level by manager_id.
+
 #' Are there more/less desirable buildings?
+building_feels <- data.frame(table(train$building_id, train$interest_level))
+names(building_feels) <- c('building_id', 'interest_level', 'freq')
+building_feels <- building_feels[building_feels$freq != 0, ]
+mean(building_feels$freq)
+#Mean frequency for a manager is 4.4. Consider managers who have frequencies of 5 or greater.
+building_feels <- building_feels[building_feels$freq >= 5, ]
+#building id of 0 seems to be an input error?
+table(as.character(manager_feels$manager_id))
+
 #' What are typical features offered? By interest_level?
+features_dict <- 
 
 #' Which streets are most common in listings?
-streets <- table(renthop.tr$display_address)
+streets <- table(train$display_address)
+head(streets[order(streets, decreasing = T)])
 #' Broadway, East 34th Street, Second Ave
 
-#' Does no photo translate to low interest?
-table(renthop.tr$interest_level[renthop.tr$photos == '[]'])
-#' Yes 95% of the time.
-
 #' Do no features translate to low interest?
-table(renthop.tr$interest_level[renthop.tr$features == '[]'])
+table(train$interest_level[renthop.tr$features == '[]'])
 #' Yes 65% of the time.
 
-#' Add photo_count column and binary photo column (0/1)
+# Note: '[]' in R View of dataframe is misleading. It does that because entry is too long to display.
 ```
 
