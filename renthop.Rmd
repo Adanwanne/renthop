@@ -10,9 +10,9 @@ library(ggplot2)
 ```
 
 ```{r reading files}
-renthop.tr <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_tr.csv')
+renthop.tr <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_tr.csv', stringsAsFactors = F)
 
-renthop.te <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_te.csv')
+renthop.te <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_te.csv', stringsAsFactors = F)
 ```
 
 # Step 0: Preparing the Data
