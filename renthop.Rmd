@@ -13,11 +13,31 @@ renthop.te <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_te.c
 
 # Step 0: Preparing the Data
 ```{r data cleaning}
+library(stringr)
+
+#Removing the brackets
 tofix = c(2:5, 9:10, 13:15)
 entry_fix <- function(x){
-  substring(toString(x), 2, nchar(toString(x))-1)
+  str_sub(x, 2, -2)
 }
 train <- data.frame(renthop.tr[,-tofix], apply(renthop.tr[,tofix], 2, entry_fix))
+train <- train[,c(1, 7:10, 2:4, 11:12, 5:6, 13:15)]
+
+#Creating a numeric variable for 'photos'
+train$photos <- str_count(train$photos, ',') + 1
+
+#Change 'created' to datetime format
+train$created <- as.POSIXct(train$created)
+
+#'description'
+toRemove <- c('<a', '<br />', '<br/>', '<p>', 'website_redacted ')
+train$description <- as.character(train$description)
+train$description <- str_replace_all(train$description, "<br />", "")
+train$description <- str_replace_all(train$description, "<br/>", " ")
+train$description <- str_replace_all(train$description, "<p>", "")
+train$description <- str_replace_all(train$description, "website_redacted ", "")
+
+# create regex to catch and remove img html like: <br><img src= \" width=\"1\" height=\"1\" /><ul><li><a target=_blank href= Robert Dillon for more information</a> </li><li><a target=_blank href= full listing information on elliman.com</a> </li></ul></p>
 
 ```
 #' Step 1: Do as much data exploration as possible by visualization, summary statistics and perhaps a more sophisticated dimensionality reduction method such as PCA and/or MDS. 
