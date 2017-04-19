@@ -7,6 +7,7 @@ output: html_document
 
 ```{r loading packages}
 library(ggplot2)
+library(stringr)
 ```
 
 ```{r reading files}
@@ -17,9 +18,7 @@ renthop.te <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_te.c
 
 # Step 0: Preparing the Data
 ```{r data cleaning}
-library(stringr)
-
-#Removing the brackets
+# (1) Remove the brackets
 tofix = c(2:5, 9:10, 13:15)
 entry_fix <- function(x){
   str_sub(x, 2, -2)
@@ -27,26 +26,35 @@ entry_fix <- function(x){
 train <- data.frame(renthop.tr[,-tofix], apply(renthop.tr[,tofix], 2, entry_fix))
 train <- train[,c(1, 7:10, 2:4, 11:12, 5:6, 13:15)]
 
-#Creating a numeric variable for 'photos'
+# (2) Make everything lowercase
+text2lower <-  c("display_address", "description", "street_address", "features")   
+train[,text2lower] <- sapply(train[,text2lower], tolower) 
+
+# (3) Remove un-needed factors
+train$description <- as.character(train$description)
+train$features <- as.character(train$features)
+
+# (4) Create a numeric variable for 'photos'
 train$photos <- ifelse(str_count(train$photos, ',') == 0, 0, str_count(train$photos, ',') + 1)
 
-#Creating a binary variable for 'photos'
+# (5) Create a binary variable for 'photos'
 train$binary_photos <- factor(ifelse(train$photos == 0, 'No', 'Yes'))
 
-#Change 'created' to datetime format
+# (6) Change 'created' to datetime format
 train$created <- as.POSIXct(train$created)
 
 #Exporting the dataframe to do some more data cleaning in Python
 write.csv(train, '/Users/adaezeajoku/Desktop/STATS415/Project/train.csv')
 
-#'description'
-train$description <- as.character(train$description)
-toRemove <- c('<a', '<br />', '<br/>', '<p>', 'website_redacted ')
-train$description <- as.character(train$description)
-train$description <- str_replace_all(train$description, "<br />", " ")
-train$description <- str_replace_all(train$description, "<br/>", " ")
-train$description <- str_replace_all(train$description, "<p>", " ")
-train$description <- str_replace_all(train$description, "website_redacted ", "")
+# (7) Prepare 'description' for tf-idf analysis
+## (a) Remove text between /> and <p><a website_redacted
+## (b) Remove text between two matching tags: <(.*?)>(.*?)<\1>
+    #Note: will result in the removal of legitimate text between div,       strong, and em tags
+## (c) Remove <p><a website_redacted
+## (d) Remove br tags
+## (e) Remove remaining punctuation marks [in Python?]
+
+# To prep the data for tfidf, remove all non-word characters, remove break tags, remove text between '<' and '/>' , remove text between '<br />' and '<p>', remove '<p><a website_redacted', remove phone numbers. Replace any removals with blank space.
 
 # create regex to catch and remove img html like: <br><img src= \" width=\"1\" height=\"1\" /><ul><li><a target=_blank href= Robert Dillon for more information</a> </li><li><a target=_blank href= full listing information on elliman.com</a> </li></ul></p>
 
@@ -59,7 +67,7 @@ Do as much data exploration as possible by visualization, summary statistics and
 ```{r notes}
 # R View of dataframe is misleading. It shows '[]' because entry is too long to display.
 
-# The following columns will not be used display_address. 
+# The following columns will not be used: display_address. 
 
 # The following columns have been added: binary_photos
 ```
@@ -74,9 +82,8 @@ table(train$interest_level)
 ```{r description}
 # Do tfidf per listing to get relatively important words. Then aggregate by interest level.
 
-# To prep the data for tfidf, make everything lowercase, remove all non-word characters, remove break tags, remove text between '<' and '/>'. Replace any removals with blank space.
+# To prep the data for tfidf, make everything lowercase, remove all non-word characters, remove break tags, remove text between '<' and '/>' [but not if between div, strong, em tags], remove text between '<br />' and '<p>', remove '<p><a website_redacted', remove phone numbers. Replace any removals with blank space.
 
-#' Is data after the <br/> character important? In particular, after the last one there's information about property manager.
 ```
 
 ```{r created}

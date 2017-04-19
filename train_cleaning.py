@@ -8,7 +8,7 @@ def var_dict_maker(df):
 	dikt = {'high': {}, 'medium': {}, 'low': {}}
 	for i in df.iterrows():
 		try:
-			varz = i[1][1].split(', ')
+			varz = i[1][1].split(', ')  #make lowercase, do set operation to get just unique features per listing
 			for var in varz:
 				if var.lower() not in dikt[i[1][0]]:
 					dikt[i[1][0]][var.lower()] = 0

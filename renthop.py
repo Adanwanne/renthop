@@ -4,7 +4,7 @@ import pandas as pd
 
 ''' Generating csv of training set '''
 train = []
-with open('train.json', 'r') as t:
+with open('/Users/adaezeajoku/Desktop/STATS415/Project/Source/train.json', 'r') as t:
 	t1 = json.load(t)
 
 k = t1.keys()
@@ -27,12 +27,12 @@ combo = zip(traine[0], traine[1], traine[2], traine[3], traine[4], traine[5], tr
 
 # col = ['key'] + k
 train_df = pd.DataFrame.from_records(combo, columns=k)
-# train_df.to_csv('renthop_tr.csv', index=False, encoding='utf-8')
+train_df.to_csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_tr.csv', index=False, encoding='utf-8')
 
 
 ''' Generating csv of test set '''
 test = []
-with open('test.json', 'r') as t:
+with open('/Users/adaezeajoku/Desktop/STATS415/Project/Source/test.json', 'r') as t:
 	t2 = json.load(t)
 
 k2 = t2.keys()
@@ -55,5 +55,5 @@ combo2 = zip(teste[0], teste[1], teste[2], teste[3], teste[4], teste[5], teste[6
 
 # # col = ['key'] + k2
 test_df = pd.DataFrame.from_records(combo2, columns=k2)
-test_df.to_csv('renthop_te.csv', index=False, encoding='utf-8')
+test_df.to_csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_te.csv', index=False, encoding='utf-8')
 
