@@ -57,7 +57,11 @@ Do as much data exploration as possible by visualization, summary statistics and
 
 ## Important Notes
 ```{r notes}
-# In R View of dataframe is misleading. It does that because entry is too long to display.
+# R View of dataframe is misleading. It shows '[]' because entry is too long to display.
+
+# The following columns will not be used display_address. 
+
+# The following columns have been added: binary_photos
 ```
 
 ## Addressing Preliminary Questions
@@ -67,15 +71,18 @@ table(train$interest_level)
 # 7.8% high (3839), 69.5% low (34284), 22.8% medium (11229)
 ```
 
-```{r display address}
-```
-
 ```{r description}
 # Do tfidf per listing to get relatively important words. Then aggregate by interest level.
+
+# To prep the data for tfidf, make everything lowercase, remove all non-word characters, remove break tags, remove text between '<' and '/>'. Replace any removals with blank space.
+
+#' Is data after the <br/> character important? In particular, after the last one there's information about property manager.
 ```
 
 ```{r created}
 # We don't have information on when/if a posting has become inactive. The only processing we can do here is to see if there are certain dates with higher amounts of one interest level versus another and then check the day of the week? We can do the same thing with hour of the day to see if a certain posting time is best. 
+
+#' Are all dates represented in different interest levels?
 ```
 
 ```{r price}
@@ -138,6 +145,8 @@ mean(building_feels$freq)
 building_feels <- building_feels[building_feels$freq >= 5, ]
 #building id of 0 seems to be an input error?
 table(as.character(manager_feels$manager_id))
+
+#' Are there different interest levels per building id?
 ```
 
 ```{r street address}
@@ -145,6 +154,10 @@ table(as.character(manager_feels$manager_id))
 streets <- table(train$display_address)
 head(streets[order(streets, decreasing = T)])
 #' Broadway, East 34th Street, Second Ave
+
+#' What is the relationship btw building # (first word in street address) and building id?
+
+#' What is the frequency of street addresses by interest level?
 ```
 
 ```{r features}
@@ -162,3 +175,5 @@ table(train$interest_level[renthop.tr$features == '[]'])
 
 # Step 2: Conclusions from Exploratory Data Analysis
 
+
+# Step 3: Statistical Learning Methods
