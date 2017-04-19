@@ -10,9 +10,9 @@ library(ggplot2)
 ```
 
 ```{r reading files}
-renthop.tr <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_tr.csv', stringsAsFactors = F)
+renthop.tr <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_tr.csv')
 
-renthop.te <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_te.csv', stringsAsFactors = F)
+renthop.te <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_te.csv')
 ```
 
 # Step 0: Preparing the Data
@@ -102,7 +102,11 @@ building_feels <- building_feels[building_feels$freq >= 5, ]
 table(as.character(manager_feels$manager_id))
 
 #' What are typical features offered? By interest_level?
-features_dict <- 
+high_features <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/high_features.csv')
+medium_features <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/medium_features.csv')
+low_features <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/low_features.csv')
+
+#Hardwood Floors are the most frequent feature of high interest listings occurring 1986 times. Assuming the feature does not occur multiple times in the same listing that comprises, 51.7% of high interest listing.
 
 #' Which streets are most common in listings?
 streets <- table(train$display_address)
