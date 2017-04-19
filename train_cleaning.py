@@ -10,9 +10,9 @@ def var_dict_maker(df):
 		try:
 			varz = i[1][1].split(', ')
 			for var in varz:
-				if var not in dikt[i[1][0]]:
-					dikt[i[1][0]][var] = 0
-				dikt[i[1][0]][var] += 1 
+				if var.lower() not in dikt[i[1][0]]:
+					dikt[i[1][0]][var.lower()] = 0
+				dikt[i[1][0]][var.lower()] += 1 
 		except:
 			if 'NA' not in dikt[i[1][0]]:
 				dikt[i[1][0]]['NA'] = 0

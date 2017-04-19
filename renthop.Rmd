@@ -40,6 +40,7 @@ train$created <- as.POSIXct(train$created)
 write.csv(train, '/Users/adaezeajoku/Desktop/STATS415/Project/train.csv')
 
 #'description'
+train$description <- as.character(train$description)
 toRemove <- c('<a', '<br />', '<br/>', '<p>', 'website_redacted ')
 train$description <- as.character(train$description)
 train$description <- str_replace_all(train$description, "<br />", " ")
@@ -79,7 +80,10 @@ boxplot(photos~interest_level, data=train)
 # For all interest levels, the distribution of photos in the ad seems equal. So perhaps having photo be a binary variable is a better option?
 
 #' What is the lat/long for listings by interest_level? Are there clusters of regions by interest_level?
-ggplot(train) + geom_point(aes(interest_level, longitude/latitude)) + geom_jitter(width=0.5)
+aggregate
+length(table(train$building_id))
+
+ggplot(train, aes(longitude, latitude, color=interest_level)) + geom_point() + geom_jitter(width=1)
 
 #' Are there certain undesirable managers?
 head(table(train$manager_id)[order(table(train$manager_id), decreasing = T)])
