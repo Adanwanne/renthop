@@ -1,6 +1,6 @@
 ---
 title: "rent hop"
-author: "Adaeze Ajoku"
+author: "Adaeze Ajoku and Phoebe Liang"
 date: "4/18/2017"
 output: html_document
 ---
@@ -55,36 +55,63 @@ train$description <- str_replace_all(train$description, "website_redacted ", "")
 # Step 1: Exploratory Data Analysis
 Do as much data exploration as possible by visualization, summary statistics and perhaps a more sophisticated dimensionality reduction method such as PCA and/or MDS. 
 
-```{r preliminary questions}
-#' (1) How much time is a posting live for interest_level to be gauged? 1 week? Are they still live?
-#Who knows? We can just assume they are still live. I do not think it will change our analysis or outcome.
+## Important Notes
+```{r notes}
+# In R View of dataframe is misleading. It does that because entry is too long to display.
+```
 
-#' (2) How many observations of each interest level are there?
+## Addressing Preliminary Questions
+```{r interest level}
+#' How many observations of each interest level are there?
 table(train$interest_level)
-#' 7.8% high (3839), 69.5% low (34284), 22.8% medium (11229)
+# 7.8% high (3839), 69.5% low (34284), 22.8% medium (11229)
+```
 
-#' (3) What is the distribution of price by interest level?
+```{r display address}
+```
+
+```{r description}
+# Do tfidf per listing to get relatively important words. Then aggregate by interest level.
+```
+
+```{r created}
+# We don't have information on when/if a posting has become inactive. The only processing we can do here is to see if there are certain dates with higher amounts of one interest level versus another and then check the day of the week? We can do the same thing with hour of the day to see if a certain posting time is best. 
+```
+
+```{r price}
+#' What is the distribution of price by interest level?
 boxplot(price~interest_level, data=train) #eliminate outliers!
 tapply(train$price, train$interest_level, summary)
-#' mean prices: high = 2700.293, low=4176.599, medium=3158.767
-#' So people are more interested the lower the price.
+#mean prices: high = 2700.293, low=4176.599, medium=3158.767
+#So people are more interested the lower the price.
 
-#' (4) How does price and interest_level relate to listing location?
+#' How does price and interest_level relate to listing location?
+```
 
-#' (5) Does no photo translate to low interest?
-table(train$interest_level[train$photos == 0])
-#' Yes 91.4% of the time.
+```{r bedrooms}
+```
 
-#' (6) How do number of photos relate to interest level?
-boxplot(photos~interest_level, data=train)
-# For all interest levels, the distribution of photos in the ad seems equal. So perhaps having photo be a binary variable is a better option?
+```{r longitude and latitude}
+#Fix graph, not showing enough points
 
 #' What is the lat/long for listings by interest_level? Are there clusters of regions by interest_level?
 aggregate
 length(table(train$building_id))
 
 ggplot(train, aes(longitude, latitude, color=interest_level)) + geom_point() + geom_jitter(width=1)
+```
 
+```{r photos}
+#' Does no photo translate to low interest?
+table(train$interest_level[train$photos == 0])
+#' Yes 91.4% of the time.
+
+#' How do number of photos relate to interest level?
+boxplot(photos~interest_level, data=train)
+# For all interest levels, the distribution of photos in the ad seems equal. So perhaps having photo be a binary variable is a better option?
+```
+
+```{r manager id}
 #' Are there certain undesirable managers?
 head(table(train$manager_id)[order(table(train$manager_id), decreasing = T)])
 manager_feels <- data.frame(table(train$manager_id, train$interest_level))
@@ -94,6 +121,13 @@ mean(manager_feels$freq)
 #Mean frequency for a manager is 8.6. Consider managers who have frequencies of 9 or greater.
 manager_feels <- manager_feels[manager_feels$freq >= 9, ]
 table(as.character(manager_feels$manager_id)) #use melt now? want to see how many frequency for each interest_level by manager_id.
+```
+
+```{r bathrooms}
+```
+
+```{r building id}
+#Q: Are building ids unique to property managers/co? (check last bit of description again building ids to see there are multiple companies in one building)
 
 #' Are there more/less desirable buildings?
 building_feels <- data.frame(table(train$building_id, train$interest_level))
@@ -104,7 +138,16 @@ mean(building_feels$freq)
 building_feels <- building_feels[building_feels$freq >= 5, ]
 #building id of 0 seems to be an input error?
 table(as.character(manager_feels$manager_id))
+```
 
+```{r street address}
+#' Which streets are most common in listings?
+streets <- table(train$display_address)
+head(streets[order(streets, decreasing = T)])
+#' Broadway, East 34th Street, Second Ave
+```
+
+```{r features}
 #' What are typical features offered? By interest_level?
 high_features <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/high_features.csv')
 medium_features <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/medium_features.csv')
@@ -112,15 +155,10 @@ low_features <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/low_featur
 
 #Hardwood Floors are the most frequent feature of high interest listings occurring 1986 times. Assuming the feature does not occur multiple times in the same listing that comprises, 51.7% of high interest listing.
 
-#' Which streets are most common in listings?
-streets <- table(train$display_address)
-head(streets[order(streets, decreasing = T)])
-#' Broadway, East 34th Street, Second Ave
-
 #' Do no features translate to low interest?
 table(train$interest_level[renthop.tr$features == '[]'])
 #' Yes 65% of the time.
-
-# Note: '[]' in R View of dataframe is misleading. It does that because entry is too long to display.
 ```
+
+# Step 2: Conclusions from Exploratory Data Analysis
 
