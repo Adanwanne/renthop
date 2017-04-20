@@ -1,0 +1,191 @@
+---
+title: "rent hop"
+author: "Adaeze Ajoku and Phoebe Liang"
+date: "4/18/2017"
+output: html_document
+---
+
+```{r loading packages and reading files}
+library(ggplot2)
+library(stringr)
+
+setwd('/Users/Phoebe/Documents/Winter2017_Courses/STATS415/renthop')
+renthop.tr <- read.csv('renthop_tr.csv', header=TRUE)
+
+#renthop.te <- read.csv('/Users/Phoebe/Documents/Winter2017_Courses/STATS415/renthop_te.csv')
+```
+
+# Step 0: Preparing the Data
+```{r data cleaning}
+# (1) Remove the brackets
+tofix = c(2:5, 9:10, 13:15)
+entry_fix <- function(x){
+  str_sub(x, 2, -2)
+}
+train <- data.frame(renthop.tr[,-tofix], apply(renthop.tr[,tofix], 2, entry_fix))
+train <- train[,c(1, 7:10, 2:4, 11:12, 5:6, 13:15)]
+
+# (2) Make everything lowercase
+text2lower <-  c("display_address", "description", "street_address", "features")   
+train[,text2lower] <- sapply(train[,text2lower], tolower) 
+
+# (3) Remove un-needed factors
+train$description <- as.character(train$description)
+train$features <- as.character(train$features)
+
+# (4) Create a numeric variable for 'photos'
+train$photos <- ifelse(str_count(train$photos, ',') == 0, 0, str_count(train$photos, ',') + 1)
+
+# (5) Create a binary variable for 'photos'
+train$binary_photos <- factor(ifelse(train$photos == 0, 'No', 'Yes'))
+
+# (6) Change 'created' to datetime format
+train$created <- as.POSIXct(train$created)
+
+#Exporting the dataframe to do some more data cleaning in Python
+write.csv(train, '/Users/Phoebe/Documents/Winter2017_Courses/STATS415/project')
+
+# (7) Prepare 'description' for tf-idf analysis
+## (a) Remove text between /> and <p><a website_redacted
+## (b) Remove text between two matching tags: <(.*?)>(.*?)<\1>
+    #Note: will result in the removal of legitimate text between div,       strong, and em tags
+## (c) Remove <p><a website_redacted
+## (d) Remove br tags
+## (e) Remove remaining punctuation marks [in Python?]
+
+# To prep the data for tfidf, remove all non-word characters, remove break tags, remove text between '<' and '/>' , remove text between '<br />' and '<p>', remove '<p><a website_redacted', remove phone numbers. Replace any removals with blank space.
+
+# create regex to catch and remove img html like: <br><img src= \" width=\"1\" height=\"1\" /><ul><li><a target=_blank href= Robert Dillon for more information</a> </li><li><a target=_blank href= full listing information on elliman.com</a> </li></ul></p>
+
+```
+
+# Step 1: Exploratory Data Analysis
+Do as much data exploration as possible by visualization, summary statistics and perhaps a more sophisticated dimensionality reduction method such as PCA and/or MDS. 
+
+## Important Notes
+```{r notes}
+# R View of dataframe is misleading. It shows '[]' because entry is too long to display.
+
+# The following columns will not be used: display_address. 
+
+# The following columns have been added: binary_photos
+```
+
+## Addressing Preliminary Questions
+```{r interest level}
+#' How many observations of each interest level are there?
+table(train$interest_level)
+# 7.8% high (3839), 69.5% low (34284), 22.8% medium (11229)
+```
+
+```{r description}
+# Do tfidf per listing to get relatively important words. Then aggregate by interest level.
+
+# To prep the data for tfidf, make everything lowercase, remove all non-word characters, remove break tags, remove text between '<' and '/>' [but not if between div, strong, em tags], remove text between '<br />' and '<p>', remove '<p><a website_redacted', remove phone numbers. Replace any removals with blank space.
+
+```
+
+```{r created}
+# We don't have information on when/if a posting has become inactive. The only processing we can do here is to see if there are certain dates with higher amounts of one interest level versus another and then check the day of the week? We can do the same thing with hour of the day to see if a certain posting time is best. 
+
+#' Are all dates represented in different interest levels?
+```
+
+```{r price}
+#' What is the distribution of price by interest level?
+boxplot(price~interest_level, data=train) #eliminate outliers!
+tapply(train$price, train$interest_level, summary)
+#mean prices: high = 2700.293, low=4176.599, medium=3158.767
+#So people are more interested the lower the price.
+
+#' How does price and interest_level relate to listing location?
+```
+
+```{r bedrooms}
+```
+
+```{r longitude and latitude}
+#Fix graph, not showing enough points
+
+#' What is the lat/long for listings by interest_level? Are there clusters of regions by interest_level?
+aggregate
+length(table(train$building_id))
+
+ggplot(train, aes(longitude, latitude, color=interest_level)) + geom_point() + geom_jitter(width=1)
+```
+
+```{r photos}
+#' Does no photo translate to low interest?
+table(train$interest_level[train$photos == 0])
+#' Yes 91.4% of the time.
+
+#' How do number of photos relate to interest level?
+boxplot(photos~interest_level, data=train)
+# For all interest levels, the distribution of photos in the ad seems equal. So perhaps having photo be a binary variable is a better option?
+```
+
+```{r manager id}
+#' Are there certain undesirable managers?
+head(table(train$manager_id)[order(table(train$manager_id), decreasing = T)])
+manager_feels <- data.frame(table(train$manager_id, train$interest_level))
+names(manager_feels) <- c('manager_id', 'interest_level', 'freq')
+manager_feels <- manager_feels[manager_feels$freq != 0, ]
+mean(manager_feels$freq)
+#Mean frequency for a manager is 8.6. Consider managers who have frequencies of 9 or greater.
+manager_feels <- manager_feels[manager_feels$freq >= 9, ]
+table(as.character(manager_feels$manager_id)) #use melt now? want to see how many frequency for each interest_level by manager_id.
+```
+
+```{r bathrooms}
+```
+
+```{r building id}
+#Q: Are building ids unique to property managers/co? (check last bit of description again building ids to see there are multiple companies in one building)
+
+#' Are there more/less desirable buildings?
+building_feels <- data.frame(table(train$building_id, train$interest_level))
+names(building_feels) <- c('building_id', 'interest_level', 'freq')
+building_feels <- building_feels[building_feels$freq != 0, ]
+mean(building_feels$freq)
+#Mean frequency for a manager is 4.4. Consider managers who have frequencies of 5 or greater.
+building_feels <- building_feels[building_feels$freq >= 5, ]
+#building id of 0 seems to be an input error?
+table(as.character(manager_feels$manager_id))
+
+#' Are there different interest levels per building id?
+```
+
+```{r street address}
+#' Which streets are most common in listings?
+streets <- table(train$display_address)
+head(streets[order(streets, decreasing = T)])
+#' Broadway, East 34th Street, Second Ave
+
+#' What is the relationship btw building # (first word in street address) and building id?
+
+#' What is the frequency of street addresses by interest level?
+```
+
+```{r features}
+#' What are typical features offered? By interest_level?
+high_features <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/high_features.csv')
+medium_features <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/medium_features.csv')
+low_features <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/low_features.csv')
+
+#Hardwood Floors are the most frequent feature of high interest listings occurring 1986 times. Assuming the feature does not occur multiple times in the same listing that comprises, 51.7% of high interest listing.
+
+#' Do no features translate to low interest?
+table(train$interest_level[renthop.tr$features == '[]'])
+#' Yes 65% of the time.
+```
+
+# Step 2: Conclusions from Exploratory Data Analysis
+
+
+# Step 3: Statistical Learning Methods
+
+```{r features}
+
+
+```
+
