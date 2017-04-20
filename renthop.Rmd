@@ -40,24 +40,75 @@ train$photos <- ifelse(str_count(train$photos, ',') == 0, 0, str_count(train$pho
 # (5) Create a binary variable for 'photos'
 train$binary_photos <- factor(ifelse(train$photos == 0, 'No', 'Yes'))
 
-# (6) Change 'created' to datetime format
-train$created <- as.POSIXct(train$created)
+# (6) Create 'hour' variable from 'created'
+train$hour <- as.numeric(str_sub(train$created, -8, -7))
 
 #Exporting the dataframe to do some more data cleaning in Python
 write.csv(train, '/Users/adaezeajoku/Desktop/STATS415/Project/train.csv')
 
 # (7) Prepare 'description' for tf-idf analysis
 ## (a) Remove text between /> and <p><a website_redacted
-## (b) Remove text between two matching tags: <(.*?)>(.*?)<\1>
-    #Note: will result in the removal of legitimate text between div,       strong, and em tags
-## (c) Remove <p><a website_redacted
-## (d) Remove br tags
-## (e) Remove remaining punctuation marks [in Python?]
+pattern1 <- '/>[^<>]*<p>'
+descr_fix <- str_replace_all(train$description, pattern1, '/> <p>')
 
-# To prep the data for tfidf, remove all non-word characters, remove break tags, remove text between '<' and '/>' , remove text between '<br />' and '<p>', remove '<p><a website_redacted', remove phone numbers. Replace any removals with blank space.
+## (b) Remove text between '<a' and '</a>'
+pattern2 <- '<a.*</a>'
+descr_fix <- str_replace_all(descr_fix, pattern2, " ")
 
-# create regex to catch and remove img html like: <br><img src= \" width=\"1\" height=\"1\" /><ul><li><a target=_blank href= Robert Dillon for more information</a> </li><li><a target=_blank href= full listing information on elliman.com</a> </li></ul></p>
+## (c) Remove text between '<' and '>'
+pattern3 <- '<.*>'
+descr_fix <- str_replace_all(descr_fix, pattern3, " ")
 
+## (d) Remove '<a website_redacted'
+pattern4 <- '<a.*ted'
+descr_fix <- str_replace_all(descr_fix, pattern4, " ")
+
+## (e) Remove phone numbers
+pattern5 <- '[0-9]{3}-[0-9]{3}-[0-9]{4}'
+descr_fix <- str_replace_all(descr_fix, pattern5, " ")
+
+## (f) Remove email and website
+pattern6 <- '[a-z]+[\\.@].*?[a-z]{3}( |;|\\/[a-z]+|")'
+descr_fix <- str_replace_all(descr_fix, pattern6, " ")
+
+pattern6a <- '[a-z]+[\\.@].*?[a-z]{3}'
+descr_fix <- str_replace_all(descr_fix, pattern6a, " ")
+
+## (g) Remove 'website_redacted'
+pattern7 <- 'website_redacted'
+descr_fix <- str_replace_all(descr_fix, pattern7, "")
+
+## (h) Remove prices
+pattern8 <- '\\$[0-9]+( |.[0-9]+)'
+descr_fix <- str_replace_all(descr_fix, pattern8, " ")
+
+## (i) Remove character that repeats 4+ times consecutively 
+pattern9 <- '[dgtwz]{4,}'
+descr_fix<- str_replace_all(descr_fix, pattern9, " ")
+descr_fix[20052] <- ""
+descr_fix[c(23913, 39444, 41526)] <- str_sub(descr_fix[c(23913, 39444, 41526)], 1, -7)
+
+## (j) Remove remaining punctuation marks
+pattern10 <- "[^[:alnum:][:space:]']"
+descr_fix <- str_replace_all(descr_fix, pattern10, " ")
+
+## (k) Reduce spaces to just one
+pattern11 <- " {2,}"
+descr_fix <- str_replace_all(descr_fix, pattern11, " ")
+
+for(i in 1:length(descr_fix)){
+  if(str_sub(descr_fix[i], start=-1) == " ")
+    {descr_fix[i] <- str_sub(descr_fix[i], 1, -2)}
+}
+
+train$description <- descr_fix
+
+#Decided against removing numbers because have info like m20 bus, 87th ave, etc.
+#Not sure if empty entries will affect tf-idf. May have to set NA values
+
+# (8) Set missing values in 'building_id'
+build_id_fix <- as.factor(ifelse(as.character(train$building_id) == '0', NA, as.character(train$building_id)))
+train$building_id <- build_id_fix
 ```
 
 # Step 1: Exploratory Data Analysis
