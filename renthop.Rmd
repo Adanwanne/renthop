@@ -42,8 +42,24 @@ train$photos <- ifelse(str_count(train$photos, ',') == 0, 0, str_count(train$pho
 # (5) Create a binary variable for 'photos'
 train$binary_photos <- factor(ifelse(train$photos == 0, 'No', 'Yes'))
 
-# (6) Create 'hour' variable from 'created'
+# (6) Create 'hour', 'month', 'year', 'date', and 'day_week' variables from 'created'
 train$hour <- as.numeric(str_sub(train$created, -8, -7))
+month <- str_sub(train$created, 6, 7)
+year <- str_sub(train$created, 1,4) #all the same year, so no invesigation needed
+date <- str_sub(train$created, 1, 10)
+date <- as.Date(date)
+date <- sort(date)
+day_week <- rep(0, length(date))
+
+sun <- c(date[1]-5, date[1]-5 + 7, date[1]-5 + 14, date[1]-5 + 21, date[1]-5 + 28, date[1]-5 + 35, date[1]-5 + 42, date[1]-5 + 49, date[1]-5 + 56, date[1]-5 + 63, date[1]-5 + 70, date[1]-5 + 77, date[1]-5 + 84, date[1]-5 + 91)
+mon <- c(date[1]-4, date[1]-4 + 7, date[1]-4 + 14, date[1]-4 + 21, date[1]-4 + 28, date[1]-4 + 35, date[1]-4 + 42, date[1]-4 + 49, date[1]-4 + 56, date[1]-4 + 63, date[1]-4 + 70, date[1]-4 + 77, date[1]-4 + 84, date[1]-4 + 91)
+tues <- c(date[1]-3, date[1]-3 + 7, date[1]-3 + 14, date[1]-3 + 21, date[1]-3 + 28, date[1]-3 + 35, date[1]-3 + 42, date[1]-3 + 49, date[1]-3 + 56, date[1]-3 + 63, date[1]-3 + 70, date[1]-3 + 77, date[1]-3 + 84, date[1]-3 + 91)
+wed <- c(date[1]-2, date[1]-2 + 7, date[1]-2 + 14, date[1]-2 + 21, date[1]-2 + 28, date[1]-2 + 35, date[1]-2 + 42, date[1]-2 + 49, date[1]-2 + 56, date[1]-2 + 63, date[1]-2 + 70, date[1]-2 + 77, date[1]-2 + 84, date[1]-2 + 91)
+thurs <- c(date[1]-1, date[1]-1 + 7, date[1]-1 + 14, date[1]-1 + 21, date[1]-1 + 28, date[1]-1 + 35, date[1]-1 + 42, date[1]-1 + 49, date[1]-1 + 56, date[1]-1 + 63, date[1]-1 + 70, date[1]-1 + 77, date[1]-1 + 84, date[1]-1 + 91)
+fri <- c(date[1], date[1] + 7, date[1] + 14, date[1] + 21, date[1] + 28, date[1] + 35, date[1] + 42, date[1] + 49, date[1] + 56, date[1] + 63, date[1] + 70, date[1] + 77, date[1] + 84, date[1] + 91)
+sat <- c(date[1]+1, date[1]+1 + 7, date[1]+1 + 14, date[1]+1 + 21, date[1]+1 + 28, date[1]+1 + 35, date[1]+1 + 42, date[1]+1 + 49, date[1]+1 + 56, date[1]+1 + 63, date[1]+1 + 70, date[1]+1 + 77, date[1]+1 + 84, date[1]+1 + 91)
+
+day_week <- ifelse(date %in% mon, 'Monday', ifelse(date %in% tues, 'Tuesday', ifelse(date %in% wed, 'Wednesday', ifelse(date %in% thurs, 'Thursday', ifelse(date %in% fri, 'Friday', ifelse(date %in% sat, 'Saturday', ifelse(date %in% sun, 'Sunday', date)))))))
 
 # (7) Prepare 'description' for tf-idf analysis
 ## (a) Remove text between /> and <p><a website_redacted
@@ -244,41 +260,40 @@ descr_dat2 %>%
   select(-total) %>%
   arrange(desc(tf_idf)) %>% 
   View()
+```
+
+```{r chi-square test}
+#This tests for independence. However, I want the bigrams to be correlated with the interest_level.
 
 descr_tbl <- table(descr_dat2$bigram, descr_dat2$interest_level)
-chisq.test(descr_tbl) #using all bigrams I get a p-value of 1 indicating that the bigrams are independent of the interest level. However, because some bigrams have a very low frequency, the chi-squared approximation may be incorrect. To account for this I will remove tf_idf that are below the mean?
-
-
-plot(density())
-test <- descr_dat2
-mean_h <- mean(descr_dat2$tf_idf[descr_dat2$`interest_level` == 'high'])
-test_h <- descr_dat2[descr_dat2$`interest_level` == 'high' & descr_dat2$tf_idf >= mean_h,]
-
-mean_m <- mean(descr_dat2$tf_idf[descr_dat2$`interest_level` == 'medium'])
-test_m <- descr_dat2[descr_dat2$`interest_level` == 'medium' & descr_dat2$tf_idf >= mean_m,]
-
-mean_l <- mean(descr_dat2$tf_idf[descr_dat2$`interest_level` == 'low'])
-test_l <- descr_dat2[descr_dat2$`interest_level` == 'low' & descr_dat2$tf_idf >= mean_l,]
-
-test <- rbind(test_h, test_m)
-test <- rbind(test, test_l)
-
-test_tbl <- table(test$bigram, test$interest_level)
-chisq.test(test_tbl)
+chisq.test(descr_tbl) 
+chisq.test(matrix(descr_tbl))
+#using all bigrams I get a p-value of 1 indicating that the bigrams are independent of the interest level. However, because some bigrams have a very low frequency, the chi-squared approximation may be incorrect. To account for this I will remove tf_idf that are below the mean? [Did so and got a chi-squared of NA]
+chisq.test(descr_dat2$bigram, descr_dat2$interest_level)
 ```
 
 ```{r created}
-# We don't have information on when/if a posting has become inactive. The only processing we can do here is to see if there are certain dates with higher amounts of one interest level versus another and then check the day of the week? We can do the same thing with hour of the day to see if a certain posting time is best. 
-
-#' Are all dates represented in different interest levels?
+# We don't have information on when/if a posting has become inactive. 
 
 #' Is there a relationship between posting hour and interest level?
-table(train$hour, train$interest_level)
+chisq.test(table(train$hour, train$interest_level))$resid  
+#percentages? no, i think the test can handle this...
+#The chi-squared test indicates significant correlation
+
+#' Is there a relationship between posting month and interest level? [We have months: Apr-June]
+chisq.test(table(month, train$interest_level))
+# p-value is 0.3784, so no.
+
+#' Is there a relationship between day of the week and interest level?
+chisq.test(table(day_week, train$interest_level))
+#p-value is 0.682, so no.
+
+#We don't have enough (repeating) dates, to examine that.
 ```
 
 ```{r price}
 #' What is the distribution of price by interest level?
-boxplot(price~interest_level, data=train) #eliminate outliers!
+boxplot(price~interest_level, data=train[train$price < 80000,]) #eliminated some severe outliers for a better visualization!
 tapply(train$price, train$interest_level, summary)
 #mean prices: high = 2700.293, low=4176.599, medium=3158.767
 #So people are more interested the lower the price.
