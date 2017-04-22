@@ -47,6 +47,7 @@ train$binary_photos <- factor(ifelse(train$photos == 0, 0, 1))
 
 # (6) Change'building_id' to numeric
 train$building_id <- as.numeric(train$building_id)
+train$building_id <- ifelse(train$building_id == 1, 0, train$building_id)
 
 # (7) Change 'manager_id' to numeric
 train$manager_id <- as.numeric(train$manager_id)
@@ -281,18 +282,33 @@ low_descr_tfidf <- descr_dat2 %>%
   filter(`interest_level` == 'low') %>% 
   arrange(desc(tf_idf)) 
 
-high_bigrams <- as.character(high_descr_tfidf$bigram[1:5000])
-medium_bigrams <- as.character(medium_descr_tfidf$bigram[1:5000])
-low_bigrams <- as.character(low_descr_tfidf$bigram[1:5000])
+high_bigrams <- as.character(high_descr_tfidf$bigram[1:100])
+medium_bigrams <- as.character(medium_descr_tfidf$bigram[1:100])
+low_bigrams <- as.character(low_descr_tfidf$bigram[1:100])
 
 descr_names <- unique(c(high_bigrams, medium_bigrams, low_bigrams))
-#ran into an issue with duplicate bigrams within the description. I used unique to remove duplicates. 
-train2 <- data.frame(matrix(ncol=length(descr_names), nrow=nrow(train2)))
+#ran into an issue with duplicate bigrams within the description. I used unique to remove duplicates.
+train2 <- data.frame(matrix(ncol=length(descr_names), nrow=nrow(train)))
 colnames(train2) <- descr_names
 train2 <- cbind(train[,c('listing_id', 'interest_level', 'price', 'binary_photos', 'bedrooms', 'bathrooms', 'hour', 'building_id', 'manager_id')], train2)
 
 for(i in 10:length(train2)){
   train2[, i] <- ifelse(grepl(colnames(train2)[i],train$add_descr) == TRUE, 1, 0) 
+}
+
+#To entirely prevent the occurrence of duplicates I would have to grab only 10 bigrams from each category. I can check to see if this will have similar performance as grabbing 100.
+high_bigrams2 <- as.character(high_descr_tfidf$bigram[1:10])
+medium_bigrams2 <- as.character(medium_descr_tfidf$bigram[1:10])
+low_bigrams2 <- as.character(low_descr_tfidf$bigram[1:10])
+
+descr_names2 <- unique(c(high_bigrams2, medium_bigrams2, low_bigrams2))
+
+train3 <- data.frame(matrix(ncol=length(descr_names2), nrow=nrow(train)))
+colnames(train3) <- descr_names2
+train3 <- cbind(train[,c('listing_id', 'interest_level', 'price', 'binary_photos', 'bedrooms', 'bathrooms', 'hour', 'building_id', 'manager_id')], train3)
+
+for(i in 10:length(train3)){
+  train3[, i] <- ifelse(grepl(colnames(train3)[i],train$add_descr) == TRUE, 1, 0) 
 }
 ```
 
@@ -467,18 +483,48 @@ low_feat_tfidf <- feat_dat %>%
   filter(`interest_level` == 'low') %>% 
   arrange(desc(tf_idf)) 
 
-feath_bigrams <- as.character(high_feat_tfidf$bigram[1:117])
-featm_bigrams <- as.character(medium_feat_tfidf$bigram[1:117])
-featl_bigrams <- as.character(low_feat_tfidf$bigram[1:117])
+feath_bigrams <- as.character(high_feat_tfidf$bigram[1:25])
+featm_bigrams <- as.character(medium_feat_tfidf$bigram[1:25])
+featl_bigrams <- as.character(low_feat_tfidf$bigram[1:25])
 
 feat_names <- unique(c(paste('f', feath_bigrams, sep= " "), paste('f', featm_bigrams, sep=" "), paste('f', featl_bigrams, sep=" ")))
 #ran into an issue with duplicate bigrams within the features. I used unique to remove duplicates. Also I added 'f' to distinguish feature bigrams from description bigrams.
 
 feat_bigrams <- data.frame(matrix(ncol=length(feat_names), nrow=nrow(train2)))
+colnames(feat_bigrams) <- feat_names
 train2 <- cbind(train2, feat_bigrams)
 
-for(i in 15010:15347){
+for(i in 301:length(train2)){
   train2[, i] <- ifelse(grepl(str_sub(colnames(train2)[i], 3), train$feat_fix) == TRUE, 1, 0) 
+}
+
+#To entirely prevent the occurrence of duplicates I would have to grab only 2 bigrams from each category. I can check to see if this will have similar performance as grabbing 25.
+feath_bigrams2 <- as.character(high_feat_tfidf$bigram[1:2])
+featm_bigrams2 <- as.character(medium_feat_tfidf$bigram[1:2])
+featl_bigrams2 <- as.character(low_feat_tfidf$bigram[1:2])
+
+feat_names2 <- unique(c(paste('f', feath_bigrams2, sep= " "), paste('f', featm_bigrams2, sep=" "), paste('f', featl_bigrams2, sep=" ")))
+#ran into an issue with duplicate bigrams within the features. I used unique to remove duplicates. Also I added 'f' to distinguish feature bigrams from description bigrams.
+
+feat_bigrams2 <- data.frame(matrix(ncol=length(feat_names2), nrow=nrow(train)))
+colnames(feat_bigrams2) <- feat_names2
+
+#Only 10 description bigrams + all 25 feature bigrams:
+train3 <- cbind(train3, feat_bigrams)
+for(i in 40:length(train3)){
+  train3[, i] <- ifelse(grepl(str_sub(colnames(train3)[i], 3), train$feat_fix) == TRUE, 1, 0) 
+}
+
+#All 300 description bigrams + only 2 feature bigrams:
+train3a <- cbind(train2[,-c(301:372)], feat_bigrams2)
+for(i in 301:length(train3a)){
+  train3a[, i] <- ifelse(grepl(str_sub(colnames(train3a)[i], 3), train$feat_fix) == TRUE, 1, 0) 
+}
+
+#Only 10 description bigrams + 2 feature bigrams:
+train3b <- cbind(train3[,-c(40:111)], feat_bigrams2)
+for(i in 40:length(train3b)){
+  train3b[, i] <- ifelse(grepl(str_sub(colnames(train3b)[i], 3), train$feat_fix) == TRUE, 1, 0) 
 }
 ```
 
@@ -492,6 +538,110 @@ library(corrplot)
 corrplot(chisq$residuals, is.cor = FALSE)
 
 # Step 3: Statistical Learning Methods
+```{r prepping the test set}
+# (1) Remove the brackets
+tofix = c(2:5, 9:10, 13:15)
+
+test <- data.frame(renthop.te[,-tofix], apply(renthop.te[,tofix], 2, entry_fix))
+test <- test[,c(1, 7:10, 2:4, 11:12, 5:6, 13:15)]
+
+# (2) Make everything lowercase
+test[,text2lower] <- sapply(test[,text2lower], tolower) 
+
+# (3) Remove un-needed factors
+test$description <- as.character(test$description)
+test$features <- as.character(test$features)
+
+# (4) Create a numeric variable for 'photos'
+test$photos <- ifelse(str_count(test$photos, ',') == 0, 0, str_count(test$photos, ',') + 1)
+
+# (5) Create a binary variable for 'photos'
+test$binary_photos <- factor(ifelse(test$photos == 0, 0, 1))
+
+# (6) Change'building_id' to numeric
+test$building_id <- as.numeric(test$building_id)
+test$building_id <- ifelse(test$building_id == 1, 0, test$building_id)
+
+# (7) Change 'manager_id' to numeric
+test$manager_id <- as.numeric(test$manager_id)
+
+# (8) Create 'hour', 'month', 'year', 'date', and 'day_week' variables from 'created'
+test$hour <- as.numeric(str_sub(test$created, -8, -7))
+table(str_sub(test$created, 6, 7))
+table(str_sub(test$created, 1,4)) #all the same year, so no invesigation needed
+
+# (9) Prepare 'description' & 'street_address' for tf-idf analysis
+test$add_descr <- paste(test$street_address, test$description, sep=" ")
+
+## (a) Remove text between /> and <p><a website_redacted
+descr_fixt <- str_replace_all(test$add_descr, pattern1, '/> <p>')
+
+## (b) Remove text between '<a' and '</a>'
+descr_fixt <- str_replace_all(descr_fixt, pattern2, " ")
+
+## (c) Remove text between '<' and '>'
+descr_fixt <- str_replace_all(descr_fixt, pattern3, " ")
+
+## (d) Remove '<a website_redacted'
+descr_fixt <- str_replace_all(descr_fixt, pattern4, " ")
+
+## (e) Remove phone numbers
+descr_fixt <- str_replace_all(descr_fixt, pattern5, " ")
+
+## (f) Remove email and website
+descr_fixt <- str_replace_all(descr_fixt, pattern6, " ")
+descr_fixt <- str_replace_all(descr_fixt, pattern6a, " ")
+
+## (g) Remove 'website_redacted'
+descr_fixt <- str_replace_all(descr_fixt, pattern7, "")
+
+## (h) Remove prices
+descr_fixt <- str_replace_all(descr_fixt, pattern8, " ")
+
+## (i) Remove '&amp'
+descr_fixt <- str_replace_all(descr_fixt, pattern9, " ")
+
+## (j) Strip all non-alphanumeric characters
+descr_fixt <- str_replace_all(descr_fixt, pattern10, " ")
+descr_fixt <- str_replace_all(descr_fixt, ' amp ', "")
+
+## (k) Remove character that repeats 4+ times consecutively CHECK!!
+pattern11 <- '[dgtwz]{4,}'
+descr_fix<- str_replace_all(descr_fix, pattern11, " ")
+descr_fix[20052] <- str_sub(descr_fix[20052], 1, 21)
+descr_fix[c(23913, 39444, 41526)] <- str_sub(descr_fix[c(23913, 39444, 41526)], 1, -15)
+
+## (l) Remove remaining punctuation marks of /,',- not between letters or numbers
+descr_fixt  <- gsub(pattern12a, " ", descr_fixt, perl=TRUE)
+descr_fixt  <- gsub(pattern12b, " ", descr_fixt, perl=TRUE)
+
+## (m) Reduce 2+ spaces to just one
+descr_fixt <- str_replace_all(descr_fixt, pattern13, " ")
+
+for(i in 1:length(descr_fixt)){
+  if(str_sub(descr_fixt[i], start=-1) == " ")
+    {descr_fixt[i] <- str_sub(descr_fixt[i], 1, -2)}
+}
+
+test$add_descr <- descr_fixt
+
+#Decided against removing numbers because have info like m20 bus, 87th ave, etc. Decided against removing stop words since tf-idf will automatically scale down words that appear in many documents such as 'the'. I will check the performance and reconsider this.
+
+# (10) Prepare 'features' for tf-idf analysis
+## (a) Strip all non-alphanumeric characters
+feat_fix <- str_replace_all(train$features, pattern10, " ")
+
+## (b) Reduce 2+ spaces to just one
+feat_fix <- str_replace_all(feat_fix, pattern13, " ")
+
+for(i in 1:length(feat_fix)){
+  if(str_sub(feat_fix[i], start=-1) == " ")
+    {feat_fix[i] <- str_sub(feat_fix[i], 1, -2)}
+}
+
+train$feat_fix <- feat_fix
+```
+
 
 ```{r random forest}
 require(rpart)
@@ -500,21 +650,59 @@ require(e1071)
 require(gbm)
 
 set.seed(357)
-train2.tr <- sample_frac(train2, 0.7)
-train2.vd <- anti_join(train2, train2.tr)
 
-classRF = randomForest(interest_level ~ . -listing_id, data=train2, ntree = 500, importance = TRUE)
-#leave terminal node size as 1.
+errors = rep(NA, 5)
+idx = 1
+for(i in c(1,25,50,75,100)){
+  classRF = randomForest(x=train2[,-c(1:2)], y=train2[,2], ntree = 100, nodesize = i, importance = TRUE)
+  errors[idx] =mean(predict(classRF, train2[,-c(1:2)]) != train2[,2])
+  idx = idx + 1
+}
+errors
+#so a node size of around 25-50 seems optimal. I will check 19 since sqrt(371) = 19.
 
-print(mean((predict(classRF, train2[,-c(1:2)]) - train2[,2] )^2))
+classRF = randomForest(x=train2[,-c(1:2)], y=train2[,2], ntree = 100, nodesize = 19, importance = TRUE)
+mean(predict(classRF, train2[,-c(1:2)]) != train2[,2])
+#for 19, the training error is 0.281 :/
+
+#Checking error with reduced bigram count
+classRF = randomForest(x=train3[,-c(1:2)], y=train3[,2], ntree = 100, nodesize = 19, importance = TRUE)
+mean(predict(classRF, train3[,-c(1:2)]) != train3[,2])
+#for red descr, full features: 0.296
+
+classRF = randomForest(x=train3a[,-c(1:2)], y=train3a[,2], ntree = 100, nodesize = 19, importance = TRUE)
+mean(predict(classRF, train3a[,-c(1:2)]) != train3a[,2])
+#for full descr, red features: 0.279
+
+classRF = randomForest(x=train3b[,-c(1:2)], y=train3b[,2], ntree = 100, nodesize = 19, importance = TRUE)
+mean(predict(classRF, train3b[,-c(1:2)]) != train3b[,2])
+#for red descr, red features: 0.287
+
+#So I will use the dataframe with 100 description bigrams and 2 feature bigrams. 
+#Now to optimize the nodesize:
+errors2 = rep(NA, 6)
+idx = 1
+for(i in c(25, 30, 35, 40, 45, 50)){
+  classRF = randomForest(x=train3a[,-c(1:2)], y=train3a[,2], ntree = 100, nodesize = i, importance = TRUE)
+  errors2[idx] =mean(predict(classRF, train3a[,-c(1:2)]) != train3a[,2])
+  idx = idx + 1
+}
+errors2 #optimal nodesize lies in (25, 30)
+
+errors3 = rep(NA, 4)
+idx = 1
+for(i in c(26, 27, 28, 29)){
+  classRF = randomForest(x=train3a[,-c(1:2)], y=train3a[,2], ntree = 100, nodesize = i, importance = TRUE)
+  errors3[idx] =mean(predict(classRF, train3a[,-c(1:2)]) != train3a[,2])
+  idx = idx + 1
+}
+errors3
 
 tuneRF #to find optimal parameters
 
-# Random forests are one of the most successful off the shelf methods, often giving good results with very little work required. There are many tuning parameters, such as the number of trees (well actually the more the better), the depth of the trees, how many variables to consider at each split ect. But in general these can be searched over pretty coarsely and still get good results. One of the disadvantages is it is much harder to interpret the role of different variables. However you can still get a measure of variable importance. 
+#Get a measure of variable importance. High MeanDecreaseGini values imply that the variable is important, and low ones imply it is not.
+classRF$importance
 
-regRF$importance
-
-# This is measured by permuting the values of each predictor for the data one at a time, and seeing how this changes the accuracy of the tree. High IncMSE values imply that the variable is important, and low ones imply it is not. 
 ```
 
 ```{r other}
