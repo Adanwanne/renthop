@@ -5,6 +5,13 @@ date: "4/18/2017"
 output: html_document
 ---
 
+```{r loading packages}
+library(ggplot2)
+library(stringr)
+library(tidytext)
+library(dplyr)
+```
+
 ```{r reading files}
 renthop.tr <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_tr.csv')
 
@@ -13,9 +20,7 @@ renthop.te <- read.csv('/Users/adaezeajoku/Desktop/STATS415/Project/renthop_te.c
 
 # Step 0: Preparing the Data
 ```{r data cleaning}
-library(stringr)
-
-#Removing the brackets
+# (1) Remove the brackets
 tofix = c(2:5, 9:10, 13:15)
 entry_fix <- function(x){
   str_sub(x, 2, -2)
@@ -23,56 +28,399 @@ entry_fix <- function(x){
 train <- data.frame(renthop.tr[,-tofix], apply(renthop.tr[,tofix], 2, entry_fix))
 train <- train[,c(1, 7:10, 2:4, 11:12, 5:6, 13:15)]
 
-#Creating a numeric variable for 'photos'
-train$photos <- str_count(train$photos, ',') + 1
+# (2) Make everything lowercase
+text2lower <-  c("display_address", "description", "street_address", "features")   
+train[,text2lower] <- sapply(train[,text2lower], tolower) 
 
-#Change 'created' to datetime format
-train$created <- as.POSIXct(train$created)
-
-#'description'
-toRemove <- c('<a', '<br />', '<br/>', '<p>', 'website_redacted ')
+# (3) Remove un-needed factors
 train$description <- as.character(train$description)
-train$description <- str_replace_all(train$description, "<br />", "")
-train$description <- str_replace_all(train$description, "<br/>", " ")
-train$description <- str_replace_all(train$description, "<p>", "")
-train$description <- str_replace_all(train$description, "website_redacted ", "")
+train$features <- as.character(train$features)
 
-# create regex to catch and remove img html like: <br><img src= \" width=\"1\" height=\"1\" /><ul><li><a target=_blank href= Robert Dillon for more information</a> </li><li><a target=_blank href= full listing information on elliman.com</a> </li></ul></p>
+# (4) Create a numeric variable for 'photos'
+train$photos <- ifelse(str_count(train$photos, ',') == 0, 0, str_count(train$photos, ',') + 1)
 
+# (5) Create a binary variable for 'photos'
+train$binary_photos <- factor(ifelse(train$photos == 0, 'No', 'Yes'))
+
+# (6) Create 'hour', 'month', 'year', 'date', and 'day_week' variables from 'created'
+train$hour <- as.numeric(str_sub(train$created, -8, -7))
+month <- str_sub(train$created, 6, 7)
+year <- str_sub(train$created, 1,4) #all the same year, so no invesigation needed
+date <- str_sub(train$created, 1, 10)
+date <- as.Date(date)
+date <- sort(date)
+day_week <- rep(0, length(date))
+
+sun <- c(date[1]-5, date[1]-5 + 7, date[1]-5 + 14, date[1]-5 + 21, date[1]-5 + 28, date[1]-5 + 35, date[1]-5 + 42, date[1]-5 + 49, date[1]-5 + 56, date[1]-5 + 63, date[1]-5 + 70, date[1]-5 + 77, date[1]-5 + 84, date[1]-5 + 91)
+mon <- c(date[1]-4, date[1]-4 + 7, date[1]-4 + 14, date[1]-4 + 21, date[1]-4 + 28, date[1]-4 + 35, date[1]-4 + 42, date[1]-4 + 49, date[1]-4 + 56, date[1]-4 + 63, date[1]-4 + 70, date[1]-4 + 77, date[1]-4 + 84, date[1]-4 + 91)
+tues <- c(date[1]-3, date[1]-3 + 7, date[1]-3 + 14, date[1]-3 + 21, date[1]-3 + 28, date[1]-3 + 35, date[1]-3 + 42, date[1]-3 + 49, date[1]-3 + 56, date[1]-3 + 63, date[1]-3 + 70, date[1]-3 + 77, date[1]-3 + 84, date[1]-3 + 91)
+wed <- c(date[1]-2, date[1]-2 + 7, date[1]-2 + 14, date[1]-2 + 21, date[1]-2 + 28, date[1]-2 + 35, date[1]-2 + 42, date[1]-2 + 49, date[1]-2 + 56, date[1]-2 + 63, date[1]-2 + 70, date[1]-2 + 77, date[1]-2 + 84, date[1]-2 + 91)
+thurs <- c(date[1]-1, date[1]-1 + 7, date[1]-1 + 14, date[1]-1 + 21, date[1]-1 + 28, date[1]-1 + 35, date[1]-1 + 42, date[1]-1 + 49, date[1]-1 + 56, date[1]-1 + 63, date[1]-1 + 70, date[1]-1 + 77, date[1]-1 + 84, date[1]-1 + 91)
+fri <- c(date[1], date[1] + 7, date[1] + 14, date[1] + 21, date[1] + 28, date[1] + 35, date[1] + 42, date[1] + 49, date[1] + 56, date[1] + 63, date[1] + 70, date[1] + 77, date[1] + 84, date[1] + 91)
+sat <- c(date[1]+1, date[1]+1 + 7, date[1]+1 + 14, date[1]+1 + 21, date[1]+1 + 28, date[1]+1 + 35, date[1]+1 + 42, date[1]+1 + 49, date[1]+1 + 56, date[1]+1 + 63, date[1]+1 + 70, date[1]+1 + 77, date[1]+1 + 84, date[1]+1 + 91)
+
+day_week <- ifelse(date %in% mon, 'Monday', ifelse(date %in% tues, 'Tuesday', ifelse(date %in% wed, 'Wednesday', ifelse(date %in% thurs, 'Thursday', ifelse(date %in% fri, 'Friday', ifelse(date %in% sat, 'Saturday', ifelse(date %in% sun, 'Sunday', date)))))))
+
+# (7) Prepare 'description' for tf-idf analysis
+## (a) Remove text between /> and <p><a website_redacted
+pattern1 <- '/>[^<>]*<p>'
+descr_fix <- str_replace_all(train$description, pattern1, '/> <p>')
+
+## (b) Remove text between '<a' and '</a>'
+pattern2 <- '<a.*</a>'
+descr_fix <- str_replace_all(descr_fix, pattern2, " ")
+
+## (c) Remove text between '<' and '>'
+pattern3 <- '<.*>'
+descr_fix <- str_replace_all(descr_fix, pattern3, " ")
+
+## (d) Remove '<a website_redacted'
+pattern4 <- '<a.*ted'
+descr_fix <- str_replace_all(descr_fix, pattern4, " ")
+
+## (e) Remove phone numbers
+pattern5 <- '[0-9]{3}-[0-9]{3}-[0-9]{4}'
+descr_fix <- str_replace_all(descr_fix, pattern5, " ")
+
+## (f) Remove email and website
+pattern6 <- '[a-z]+[\\.@].*?[a-z]{3}( |;|\\/[a-z]+|")'
+descr_fix <- str_replace_all(descr_fix, pattern6, " ")
+
+pattern6a <- '[a-z]+[\\.@].*?[a-z]{3}'
+descr_fix <- str_replace_all(descr_fix, pattern6a, " ")
+
+## (g) Remove 'website_redacted'
+pattern7 <- 'website_redacted'
+descr_fix <- str_replace_all(descr_fix, pattern7, "")
+
+## (h) Remove prices
+pattern8 <- '\\$[0-9]+( |.[0-9]+)'
+descr_fix <- str_replace_all(descr_fix, pattern8, " ")
+
+## (i) Remove character that repeats 4+ times consecutively 
+pattern9 <- '[dgtwz]{4,}'
+descr_fix<- str_replace_all(descr_fix, pattern9, " ")
+descr_fix[20052] <- ""
+descr_fix[c(23913, 39444, 41526)] <- str_sub(descr_fix[c(23913, 39444, 41526)], 1, -7)
+
+## (j) Remove '&amp'
+pattern10 <- '&amp'
+descr_fix <- str_replace_all(descr_fix, pattern10, " ")
+
+## (k) Remove remaining punctuation marks
+pattern11a <- '(?<![a-z0-9])[[:punct:]]' 
+pattern11b <- '[[:punct:]](?![a-z0-9])'
+pattern11c <- "(?!('|/|-))[[:punct:]]"
+descr_fix  <- gsub(pattern11a, " ", descr_fix, perl=TRUE)
+descr_fix  <- gsub(pattern11b, " ", descr_fix, perl=TRUE)
+descr_fix  <- gsub(pattern11c, " ", descr_fix, perl=TRUE)
+
+## (l) Remove tab characters
+pattern12 <- "\t+"
+line <- '\tg\t\t122hhh'
+descr_fix <- str_replace_all(descr_fix, pattern12, "")
+
+## (m) Reduce spaces to just one
+pattern13 <- " {2,}"
+descr_fix <- str_replace_all(descr_fix, pattern13, " ")
+
+for(i in 1:length(descr_fix)){
+  if(str_sub(descr_fix[i], start=-1) == " ")
+    {descr_fix[i] <- str_sub(descr_fix[i], 1, -2)}
+}
+
+train$description <- descr_fix
+
+#Decided against removing numbers because have info like m20 bus, 87th ave, etc.
+#Not sure if empty entries will affect tf-idf. May have to set NA values. Also not sure if using " " as replacement is okay; maybe no space is better?
+
+# (8) Set missing values in 'building_id'
+build_id_fix <- as.factor(ifelse(as.character(train$building_id) == '0', NA, as.character(train$building_id)))
+train$building_id <- build_id_fix
 ```
-#' Step 1: Do as much data exploration as possible by visualization, summary statistics and perhaps a more sophisticated dimensionality reduction method such as PCA and/or MDS. 
-#' 
 
-#' how much time is a posting live for interest_level to be gauged? 1 week? Are they still live?
+# Step 1: Exploratory Data Analysis
+Do as much data exploration as possible by visualization, summary statistics and perhaps a more sophisticated dimensionality reduction method such as PCA and/or MDS. 
 
+## Important Notes
+```{r notes}
+# R View of dataframe is misleading. It shows '[]' because entry is too long to display.
+
+# The following columns will not be used: display_address. 
+
+# The following columns have been added: binary_photos
+```
+
+## Addressing Preliminary Questions
+```{r interest level}
 #' How many observations of each interest level are there?
-table(renthop.tr$interest_level)
-#' 7.8% high, 69.5% low, 22.8% medium
+table(train$interest_level)
+# 7.8% high (3839), 69.5% low (34284), 22.8% medium (11229)
+```
 
+```{r description}
+# Do tfidf by interest level.
+trim <- function (x) gsub("^[[:space:]]+|^[[:punct:]]+|[[:space:]]+$|[[:punct:]]+$", "", x) 
+#remove white space, leading or trailing punction marks
+```
+
+```{r one word approach}
+high_descr_char <- paste(train$description[train$interest_level=='high'], sep=" ")
+high_descr_dat <- data.frame(`word` = unlist(strsplit(high_descr_char, " ")), `n` = rep(1, 212505))
+high_descr_dat$word <- trim(high_descr_dat$word)
+high_descr_dat <- setNames(aggregate(high_descr_dat$n, by=list(high_descr_dat$word), FUN='sum'), c('word', 'n'))
+high_descr_dat <- high_descr_dat[-1,]
+high_descr_dat$total <- rep(sum(high_descr_dat$n), nrow(high_descr_dat))
+high_descr_dat$`interest_level` <- rep('high', nrow(high_descr_dat))
+
+medium_descr_char <- paste(train$description[train$interest_level=='medium'], sep=" ")
+medium_descr_dat <- data.frame(`word` = unlist(strsplit(medium_descr_char, " ")), `n` = rep(1, 633902))
+medium_descr_dat$word <- trim(medium_descr_dat$word)
+medium_descr_dat <- setNames(aggregate(medium_descr_dat$n, by=list(medium_descr_dat$word), FUN='sum'), c('word', 'n'))
+medium_descr_dat <- medium_descr_dat[-1,]
+medium_descr_dat$total <- rep(sum(medium_descr_dat$n), nrow(medium_descr_dat))
+medium_descr_dat$`interest_level` <- rep('medium', nrow(medium_descr_dat))
+
+low_descr_char <- paste(train$description[train$interest_level=='low'], sep=" ")
+low_descr_dat <- data.frame(`word` = unlist(strsplit(low_descr_char, " ")), `n` = rep(1, 1823704))
+low_descr_dat$word <- trim(low_descr_dat$word)
+low_descr_dat <- setNames(aggregate(low_descr_dat$n, by=list(low_descr_dat$word), FUN='sum'), c('word', 'n'))
+low_descr_dat <- low_descr_dat[-c(1:2),]
+low_descr_dat$total <- rep(sum(low_descr_dat$n), nrow(low_descr_dat))
+low_descr_dat$`interest_level` <- rep('low', nrow(low_descr_dat))
+
+descr_dat <- rbind(high_descr_dat, medium_descr_dat)
+descr_dat <- rbind(descr_dat, low_descr_dat)
+
+ggplot(descr_dat, aes(n/total, fill = interest_level)) +
+  geom_histogram(show.legend = FALSE) +
+  xlim(NA, 0.0009) +
+  facet_wrap(~interest_level, ncol = 2, scales = "free_y")
+
+descr_dat <- descr_dat %>% 
+  bind_tf_idf(word, interest_level, n)
+#other package to set weight for if_idf?
+
+descr_dat %>%
+  filter(`interest_level` == 'high') %>% 
+  select(-total) %>%
+  arrange(desc(tf_idf)) %>% 
+  View()
+
+#hm. not great findings with just one word. try creating bigrams.
+```
+
+```{r bigram approach}
+ngram_maker <- function(x,c){
+  s1 <- ngrams(x, c)
+  s2 <- vapply(s1, paste, "", collapse = " ") 
+  s2
+}
+
+high_descr_word <- unlist(strsplit(high_descr_char, " "))
+high_descr_word <- trim(high_descr_word)
+high_descr_word <-  high_descr_word[high_descr_word != ""]
+high_descr_dat2 <- data.frame(`bigram` = ngram_maker(high_descr_word, 2L), `n` = rep(1, 211857))
+high_descr_dat2 <- setNames(aggregate(high_descr_dat2$n, by=list(high_descr_dat2$bigram), FUN='sum'), c('bigram', 'n'))
+high_descr_dat2$total <- rep(sum(high_descr_dat2$n), nrow(high_descr_dat2))
+high_descr_dat2$`interest_level` <- rep('high', nrow(high_descr_dat2))
+
+medium_descr_word <- unlist(strsplit(medium_descr_char, " "))
+medium_descr_word <- trim(medium_descr_word)
+medium_descr_word <-  medium_descr_word[medium_descr_word != ""]
+medium_descr_dat2 <- data.frame(`bigram` = ngram_maker(medium_descr_word, 2L), `n` = rep(1, 632226))
+medium_descr_dat2 <- setNames(aggregate(medium_descr_dat2$n, by=list(medium_descr_dat2$bigram), FUN='sum'), c('bigram', 'n'))
+medium_descr_dat2$total <- rep(sum(medium_descr_dat2$n), nrow(medium_descr_dat2))
+medium_descr_dat2$`interest_level` <- rep('medium', nrow(medium_descr_dat2))
+
+low_descr_word <- unlist(strsplit(low_descr_char, " "))
+low_descr_word <- trim(low_descr_word)
+low_descr_word <-  low_descr_word[low_descr_word != ""]
+low_descr_dat2 <- data.frame(`bigram` = ngram_maker(low_descr_word, 2L), `n` = rep(1, 1818792))
+low_descr_dat2 <- setNames(aggregate(low_descr_dat2$n, by=list(low_descr_dat2$bigram), FUN='sum'), c('bigram', 'n'))
+low_descr_dat2$total <- rep(sum(low_descr_dat2$n), nrow(low_descr_dat2))
+low_descr_dat2$`interest_level` <- rep('low', nrow(low_descr_dat2))
+
+#I'm going to run into an issue since I had to do additional cleaning outside of the description... have to fully clean BEFORE this step...
+
+descr_dat2 <- rbind(high_descr_dat2, medium_descr_dat2)
+descr_dat2 <- rbind(descr_dat2, low_descr_dat2)
+
+ggplot(descr_dat2, aes(n/total, fill = interest_level)) +
+  geom_histogram(show.legend = FALSE) +
+  xlim(NA, 0.0009) +
+  facet_wrap(~interest_level, ncol = 2, scales = "free_y")
+
+descr_dat2 <- descr_dat2 %>% 
+  bind_tf_idf(bigram, interest_level, n)
+#other package to set weight for if_idf?
+
+descr_dat2 %>%
+  filter(`interest_level` == 'medium') %>% 
+  select(-total) %>%
+  arrange(desc(tf_idf)) %>% 
+  View()
+```
+
+```{r chi-square test}
+#This tests for independence. However, I want the bigrams to be correlated with the interest_level.
+
+descr_tbl <- table(descr_dat2$bigram, descr_dat2$interest_level)
+chisq.test(descr_tbl) 
+chisq.test(matrix(descr_tbl))
+#using all bigrams I get a p-value of 1 indicating that the bigrams are independent of the interest level. However, because some bigrams have a very low frequency, the chi-squared approximation may be incorrect. To account for this I will remove tf_idf that are below the mean? [Did so and got a chi-squared of NA]
+chisq.test(descr_dat2$bigram, descr_dat2$interest_level)
+```
+
+```{r created}
+# We don't have information on when/if a posting has become inactive. 
+
+#' Is there a relationship between posting hour and interest level?
+chisq.test(table(train$hour, train$interest_level))$resid  
+#percentages? no, i think the test can handle this...
+#The chi-squared test indicates significant correlation
+
+#' Is there a relationship between posting month and interest level? [We have months: Apr-June]
+chisq.test(table(month, train$interest_level))
+# p-value is 0.3784, so no.
+
+#' Is there a relationship between day of the week and interest level?
+chisq.test(table(day_week, train$interest_level))
+#p-value is 0.682, so no.
+
+#We don't have enough (repeating) dates, to examine that.
+```
+
+```{r price}
 #' What is the distribution of price by interest level?
-boxplot(price~interest_level, data=renthop.tr) #eliminate outliers!
-tapply(renthop.tr$price, renthop.tr$interest_level, summary)
-#' mean prices: high = 2700.293, low=4176.599, medium=3158.767
-#' So people are more interested the lower the price.
+boxplot(price~interest_level, data=train[train$price < 80000,]) #eliminated some severe outliers for a better visualization!
+tapply(train$price, train$interest_level, summary)
+#mean prices: high = 2700.293, low=4176.599, medium=3158.767
+#So people are more interested the lower the price.
 
-#' How many words are in the description for each interest_level?
+#' How does price and interest_level relate to listing location?
+```
+
+```{r bedrooms}
+```
+
+```{r longitude and latitude}
+#Fix graph, not showing enough points
+
 #' What is the lat/long for listings by interest_level? Are there clusters of regions by interest_level?
-#' Are there certain undesirable managers?
-#' Are there more/less desirable buildings?
-#' What are typical features offered? By interest_level?
+aggregate
+length(table(train$building_id))
 
+ggplot(train, aes(longitude, latitude, color=interest_level)) + geom_point() + geom_jitter(width=1)
+```
+
+```{r photos}
+#' Does no photo translate to low interest?
+table(train$interest_level[train$photos == 0])
+#' Yes 91.4% of the time.
+
+#' How do number of photos relate to interest level?
+boxplot(photos~interest_level, data=train)
+# For all interest levels, the distribution of photos in the ad seems equal. So perhaps having photo be a binary variable is a better option?
+```
+
+```{r manager id}
+#' Are there certain undesirable managers?
+head(table(train$manager_id)[order(table(train$manager_id), decreasing = T)])
+manager_feels <- data.frame(table(train$manager_id, train$interest_level))
+names(manager_feels) <- c('manager_id', 'interest_level', 'freq')
+manager_feels <- manager_feels[manager_feels$freq != 0, ]
+mean(manager_feels$freq)
+#Mean frequency for a manager is 8.6. Consider managers who have frequencies of 9 or greater.
+manager_feels <- manager_feels[manager_feels$freq >= 9, ]
+table(as.character(manager_feels$manager_id)) #use melt now? want to see how many frequency for each interest_level by manager_id.
+```
+
+```{r bathrooms}
+```
+
+```{r building id}
+#Q: Are building ids unique to property managers/co? (check last bit of description again building ids to see there are multiple companies in one building)
+
+#' Are there more/less desirable buildings?
+building_feels <- data.frame(table(train$building_id, train$interest_level))
+names(building_feels) <- c('building_id', 'interest_level', 'freq')
+building_feels <- building_feels[building_feels$freq != 0, ]
+mean(building_feels$freq)
+#Mean frequency for a manager is 4.4. Consider managers who have frequencies of 5 or greater.
+building_feels <- building_feels[building_feels$freq >= 5, ]
+#building id of 0 seems to be an input error?
+table(as.character(manager_feels$manager_id))
+
+#' Are there different interest levels per building id?
+```
+
+```{r street address}
 #' Which streets are most common in listings?
-streets <- table(renthop.tr$display_address)
+streets <- table(train$display_address)
+head(streets[order(streets, decreasing = T)])
 #' Broadway, East 34th Street, Second Ave
 
-#' Does no photo translate to low interest?
-table(renthop.tr$interest_level[renthop.tr$photos == '[]'])
-#' Yes 95% of the time.
+#' What is the relationship btw building # (first word in street address) and building id?
 
-#' Do no features translate to low interest?
-table(renthop.tr$interest_level[renthop.tr$features == '[]'])
-#' Yes 65% of the time.
-
-#' Add photo_count column and binary photo column (0/1)
+#' What is the frequency of street addresses by interest level?
 ```
 
+```{r features}
+#' What are typical features offered? By interest_level?
+#Hardwood Floors are the most frequent feature of high interest listings occurring 1986 times. Assuming the feature does not occur multiple times in the same listing that comprises, 51.7% of high interest listing.
+
+high_feat_char <- paste(train$features[train$interest_level=='high'], sep=" ")
+high_feat_dat <- data.frame(`word` = unlist(strsplit(high_feat_char, " ")), `n` = rep(1, 36600))
+high_feat_dat$word <- trim(high_feat_dat$word)
+high_feat_dat <- setNames(aggregate(high_feat_dat$n, by=list(high_feat_dat$word), FUN='sum'), c('word', 'n'))
+high_descr_dat <- high_descr_dat[-1,]
+high_descr_dat$total <- rep(sum(high_descr_dat$n), nrow(high_descr_dat))
+high_descr_dat$`interest_level` <- rep('high', nrow(high_descr_dat))
+
+medium_descr_char <- paste(train$description[train$interest_level=='medium'], sep=" ")
+medium_descr_dat <- data.frame(`word` = unlist(strsplit(medium_descr_char, " ")), `n` = rep(1, 650654))
+medium_descr_dat$word <- trim(medium_descr_dat$word)
+medium_descr_dat <- setNames(aggregate(medium_descr_dat$n, by=list(medium_descr_dat$word), FUN='sum'), c('word', 'n'))
+medium_descr_dat <- medium_descr_dat[-c(1:3),]
+medium_descr_dat$total <- rep(sum(medium_descr_dat$n), nrow(medium_descr_dat))
+medium_descr_dat$`interest_level` <- rep('medium', nrow(medium_descr_dat))
+
+low_descr_char <- paste(train$description[train$interest_level=='low'], sep=" ")
+low_descr_dat <- data.frame(`word` = unlist(strsplit(low_descr_char, " ")), `n` = rep(1, 1876085))
+low_descr_dat$word <- trim(low_descr_dat$word)
+low_descr_dat <- setNames(aggregate(low_descr_dat$n, by=list(low_descr_dat$word), FUN='sum'), c('word', 'n'))
+low_descr_dat <- low_descr_dat[-c(1:2),]
+low_descr_dat$total <- rep(sum(low_descr_dat$n), nrow(low_descr_dat))
+low_descr_dat$`interest_level` <- rep('low', nrow(low_descr_dat))
+
+descr_dat <- rbind(high_descr_dat, medium_descr_dat)
+descr_dat <- rbind(descr_dat, low_descr_dat)
+
+ggplot(descr_dat, aes(n/total, fill = interest_level)) +
+  geom_histogram(show.legend = FALSE) +
+  xlim(NA, 0.0009) +
+  facet_wrap(~interest_level, ncol = 2, scales = "free_y")
+
+descr_dat <- descr_dat %>% 
+  bind_tf_idf(word, interest_level, n)
+#other package to set weight for if_idf?
+
+descr_dat %>%
+  filter(`interest_level` == 'medium') %>% 
+  select(-total) %>%
+  arrange(desc(tf_idf)) %>% 
+  View()
+
+test <- 'dining room, doorman, elevator, pre-war - & /'
+gsub(" [[:punct:]]", " ", test)
+
+#' Do no features translate to low interest?
+table(train$interest_level[train$features == ''])
+#' Yes 65% of the time.
+```
+
+# Step 2: Conclusions from Exploratory Data Analysis
+
+
+# Step 3: Statistical Learning Methods
