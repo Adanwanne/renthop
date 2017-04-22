@@ -10,6 +10,9 @@ library(ggplot2)
 library(stringr)
 library(tidytext)
 library(dplyr)
+library(NLP)
+library(randomForest)
+#library("gplots")
 ```
 
 ```{r reading files}
@@ -40,12 +43,18 @@ train$features <- as.character(train$features)
 train$photos <- ifelse(str_count(train$photos, ',') == 0, 0, str_count(train$photos, ',') + 1)
 
 # (5) Create a binary variable for 'photos'
-train$binary_photos <- factor(ifelse(train$photos == 0, 'No', 'Yes'))
+train$binary_photos <- factor(ifelse(train$photos == 0, 0, 1))
 
-# (6) Create 'hour', 'month', 'year', 'date', and 'day_week' variables from 'created'
+# (6) Change'building_id' to numeric
+train$building_id <- as.numeric(train$building_id)
+
+# (7) Change 'manager_id' to numeric
+train$manager_id <- as.numeric(train$manager_id)
+
+# (8) Create 'hour', 'month', 'year', 'date', and 'day_week' variables from 'created'
 train$hour <- as.numeric(str_sub(train$created, -8, -7))
 month <- str_sub(train$created, 6, 7)
-year <- str_sub(train$created, 1,4) #all the same year, so no invesigation needed
+table(str_sub(train$created, 1,4)) #all the same year, so no invesigation needed
 date <- str_sub(train$created, 1, 10)
 date <- as.Date(date)
 date <- sort(date)
@@ -61,10 +70,12 @@ sat <- c(date[1]+1, date[1]+1 + 7, date[1]+1 + 14, date[1]+1 + 21, date[1]+1 + 2
 
 day_week <- ifelse(date %in% mon, 'Monday', ifelse(date %in% tues, 'Tuesday', ifelse(date %in% wed, 'Wednesday', ifelse(date %in% thurs, 'Thursday', ifelse(date %in% fri, 'Friday', ifelse(date %in% sat, 'Saturday', ifelse(date %in% sun, 'Sunday', date)))))))
 
-# (7) Prepare 'description' for tf-idf analysis
+# (9) Prepare 'description' & 'street_address' for tf-idf analysis
+train$add_descr <- paste(train$street_address, train$description, sep=" ")
+
 ## (a) Remove text between /> and <p><a website_redacted
 pattern1 <- '/>[^<>]*<p>'
-descr_fix <- str_replace_all(train$description, pattern1, '/> <p>')
+descr_fix <- str_replace_all(train$add_descr, pattern1, '/> <p>')
 
 ## (b) Remove text between '<a' and '</a>'
 pattern2 <- '<a.*</a>'
@@ -97,30 +108,29 @@ descr_fix <- str_replace_all(descr_fix, pattern7, "")
 pattern8 <- '\\$[0-9]+( |.[0-9]+)'
 descr_fix <- str_replace_all(descr_fix, pattern8, " ")
 
-## (i) Remove character that repeats 4+ times consecutively 
-pattern9 <- '[dgtwz]{4,}'
-descr_fix<- str_replace_all(descr_fix, pattern9, " ")
-descr_fix[20052] <- ""
-descr_fix[c(23913, 39444, 41526)] <- str_sub(descr_fix[c(23913, 39444, 41526)], 1, -7)
+## (i) Remove '&amp'
+pattern9 <- '&amp'
+descr_fix <- str_replace_all(descr_fix, pattern9, " ")
 
-## (j) Remove '&amp'
-pattern10 <- '&amp'
+## (j) Strip all non-alphanumeric characters
+pattern10 <- "[^a-z0-9'/-]"
 descr_fix <- str_replace_all(descr_fix, pattern10, " ")
 
-## (k) Remove remaining punctuation marks
-pattern11a <- '(?<![a-z0-9])[[:punct:]]' 
-pattern11b <- '[[:punct:]](?![a-z0-9])'
-pattern11c <- "(?!('|/|-))[[:punct:]]"
-descr_fix  <- gsub(pattern11a, " ", descr_fix, perl=TRUE)
-descr_fix  <- gsub(pattern11b, " ", descr_fix, perl=TRUE)
-descr_fix  <- gsub(pattern11c, " ", descr_fix, perl=TRUE)
+descr_fix <- str_replace_all(descr_fix, ' amp ', "")
 
-## (l) Remove tab characters
-pattern12 <- "\t+"
-line <- '\tg\t\t122hhh'
-descr_fix <- str_replace_all(descr_fix, pattern12, "")
+## (k) Remove character that repeats 4+ times consecutively 
+pattern11 <- '[dgtwz]{4,}'
+descr_fix<- str_replace_all(descr_fix, pattern11, " ")
+descr_fix[20052] <- str_sub(descr_fix[20052], 1, 21)
+descr_fix[c(23913, 39444, 41526)] <- str_sub(descr_fix[c(23913, 39444, 41526)], 1, -15)
 
-## (m) Reduce spaces to just one
+## (l) Remove remaining punctuation marks of /,',- not between letters or numbers
+pattern12a <- '(?<![a-z0-9])[[:punct:]]' 
+pattern12b <- '[[:punct:]](?![a-z0-9])'
+descr_fix  <- gsub(pattern12a, " ", descr_fix, perl=TRUE)
+descr_fix  <- gsub(pattern12b, " ", descr_fix, perl=TRUE)
+
+## (m) Reduce 2+ spaces to just one
 pattern13 <- " {2,}"
 descr_fix <- str_replace_all(descr_fix, pattern13, " ")
 
@@ -129,18 +139,27 @@ for(i in 1:length(descr_fix)){
     {descr_fix[i] <- str_sub(descr_fix[i], 1, -2)}
 }
 
-train$description <- descr_fix
+train$add_descr <- descr_fix
 
-#Decided against removing numbers because have info like m20 bus, 87th ave, etc.
-#Not sure if empty entries will affect tf-idf. May have to set NA values. Also not sure if using " " as replacement is okay; maybe no space is better?
+#Decided against removing numbers because have info like m20 bus, 87th ave, etc. Decided against removing stop words since tf-idf will automatically scale down words that appear in many documents such as 'the'. I will check the performance and reconsider this.
 
-# (8) Set missing values in 'building_id'
-build_id_fix <- as.factor(ifelse(as.character(train$building_id) == '0', NA, as.character(train$building_id)))
-train$building_id <- build_id_fix
+# (10) Prepare 'features' for tf-idf analysis
+## (a) Strip all non-alphanumeric characters
+feat_fix <- str_replace_all(train$features, pattern10, " ")
+
+## (b) Reduce 2+ spaces to just one
+feat_fix <- str_replace_all(feat_fix, pattern13, " ")
+
+for(i in 1:length(feat_fix)){
+  if(str_sub(feat_fix[i], start=-1) == " ")
+    {feat_fix[i] <- str_sub(feat_fix[i], 1, -2)}
+}
+
+train$feat_fix <- feat_fix
 ```
 
 # Step 1: Exploratory Data Analysis
-Do as much data exploration as possible by visualization, summary statistics and perhaps a more sophisticated dimensionality reduction method such as PCA and/or MDS. 
+Do as much data exploration as possible by visualization and summary statistics. 
 
 ## Important Notes
 ```{r notes}
@@ -158,14 +177,11 @@ table(train$interest_level)
 # 7.8% high (3839), 69.5% low (34284), 22.8% medium (11229)
 ```
 
-```{r description}
-# Do tfidf by interest level.
-trim <- function (x) gsub("^[[:space:]]+|^[[:punct:]]+|[[:space:]]+$|[[:punct:]]+$", "", x) 
-#remove white space, leading or trailing punction marks
-```
+```{r description: one word tfidf}
+trim <- function (x) gsub("^[[:space:]]+|[[:space:]]+$", "", x) 
+#remove leading or trailing white space
 
-```{r one word approach}
-high_descr_char <- paste(train$description[train$interest_level=='high'], sep=" ")
+high_descr_char <- paste(train$add_descr[train$interest_level=='high'], sep=" ")
 high_descr_dat <- data.frame(`word` = unlist(strsplit(high_descr_char, " ")), `n` = rep(1, 212505))
 high_descr_dat$word <- trim(high_descr_dat$word)
 high_descr_dat <- setNames(aggregate(high_descr_dat$n, by=list(high_descr_dat$word), FUN='sum'), c('word', 'n'))
@@ -173,7 +189,7 @@ high_descr_dat <- high_descr_dat[-1,]
 high_descr_dat$total <- rep(sum(high_descr_dat$n), nrow(high_descr_dat))
 high_descr_dat$`interest_level` <- rep('high', nrow(high_descr_dat))
 
-medium_descr_char <- paste(train$description[train$interest_level=='medium'], sep=" ")
+medium_descr_char <- paste(train$add_descr[train$interest_level=='medium'], sep=" ")
 medium_descr_dat <- data.frame(`word` = unlist(strsplit(medium_descr_char, " ")), `n` = rep(1, 633902))
 medium_descr_dat$word <- trim(medium_descr_dat$word)
 medium_descr_dat <- setNames(aggregate(medium_descr_dat$n, by=list(medium_descr_dat$word), FUN='sum'), c('word', 'n'))
@@ -181,7 +197,7 @@ medium_descr_dat <- medium_descr_dat[-1,]
 medium_descr_dat$total <- rep(sum(medium_descr_dat$n), nrow(medium_descr_dat))
 medium_descr_dat$`interest_level` <- rep('medium', nrow(medium_descr_dat))
 
-low_descr_char <- paste(train$description[train$interest_level=='low'], sep=" ")
+low_descr_char <- paste(train$add_descr[train$interest_level=='low'], sep=" ")
 low_descr_dat <- data.frame(`word` = unlist(strsplit(low_descr_char, " ")), `n` = rep(1, 1823704))
 low_descr_dat$word <- trim(low_descr_dat$word)
 low_descr_dat <- setNames(aggregate(low_descr_dat$n, by=list(low_descr_dat$word), FUN='sum'), c('word', 'n'))
@@ -220,7 +236,7 @@ ngram_maker <- function(x,c){
 high_descr_word <- unlist(strsplit(high_descr_char, " "))
 high_descr_word <- trim(high_descr_word)
 high_descr_word <-  high_descr_word[high_descr_word != ""]
-high_descr_dat2 <- data.frame(`bigram` = ngram_maker(high_descr_word, 2L), `n` = rep(1, 211857))
+high_descr_dat2 <- data.frame(`bigram` = ngram_maker(high_descr_word, 2L), `n` = rep(1, 223954))
 high_descr_dat2 <- setNames(aggregate(high_descr_dat2$n, by=list(high_descr_dat2$bigram), FUN='sum'), c('bigram', 'n'))
 high_descr_dat2$total <- rep(sum(high_descr_dat2$n), nrow(high_descr_dat2))
 high_descr_dat2$`interest_level` <- rep('high', nrow(high_descr_dat2))
@@ -228,7 +244,7 @@ high_descr_dat2$`interest_level` <- rep('high', nrow(high_descr_dat2))
 medium_descr_word <- unlist(strsplit(medium_descr_char, " "))
 medium_descr_word <- trim(medium_descr_word)
 medium_descr_word <-  medium_descr_word[medium_descr_word != ""]
-medium_descr_dat2 <- data.frame(`bigram` = ngram_maker(medium_descr_word, 2L), `n` = rep(1, 632226))
+medium_descr_dat2 <- data.frame(`bigram` = ngram_maker(medium_descr_word, 2L), `n` = rep(1, 666555))
 medium_descr_dat2 <- setNames(aggregate(medium_descr_dat2$n, by=list(medium_descr_dat2$bigram), FUN='sum'), c('bigram', 'n'))
 medium_descr_dat2$total <- rep(sum(medium_descr_dat2$n), nrow(medium_descr_dat2))
 medium_descr_dat2$`interest_level` <- rep('medium', nrow(medium_descr_dat2))
@@ -236,12 +252,10 @@ medium_descr_dat2$`interest_level` <- rep('medium', nrow(medium_descr_dat2))
 low_descr_word <- unlist(strsplit(low_descr_char, " "))
 low_descr_word <- trim(low_descr_word)
 low_descr_word <-  low_descr_word[low_descr_word != ""]
-low_descr_dat2 <- data.frame(`bigram` = ngram_maker(low_descr_word, 2L), `n` = rep(1, 1818792))
+low_descr_dat2 <- data.frame(`bigram` = ngram_maker(low_descr_word, 2L), `n` = rep(1, 1928101))
 low_descr_dat2 <- setNames(aggregate(low_descr_dat2$n, by=list(low_descr_dat2$bigram), FUN='sum'), c('bigram', 'n'))
 low_descr_dat2$total <- rep(sum(low_descr_dat2$n), nrow(low_descr_dat2))
 low_descr_dat2$`interest_level` <- rep('low', nrow(low_descr_dat2))
-
-#I'm going to run into an issue since I had to do additional cleaning outside of the description... have to fully clean BEFORE this step...
 
 descr_dat2 <- rbind(high_descr_dat2, medium_descr_dat2)
 descr_dat2 <- rbind(descr_dat2, low_descr_dat2)
@@ -255,11 +269,31 @@ descr_dat2 <- descr_dat2 %>%
   bind_tf_idf(bigram, interest_level, n)
 #other package to set weight for if_idf?
 
-descr_dat2 %>%
+high_descr_tfidf <- descr_dat2 %>%
+  filter(`interest_level` == 'high') %>% 
+  arrange(desc(tf_idf)) 
+
+medium_descr_tfidf <- descr_dat2 %>%
   filter(`interest_level` == 'medium') %>% 
-  select(-total) %>%
-  arrange(desc(tf_idf)) %>% 
-  View()
+  arrange(desc(tf_idf)) 
+
+low_descr_tfidf <- descr_dat2 %>%
+  filter(`interest_level` == 'low') %>% 
+  arrange(desc(tf_idf)) 
+
+high_bigrams <- as.character(high_descr_tfidf$bigram[1:5000])
+medium_bigrams <- as.character(medium_descr_tfidf$bigram[1:5000])
+low_bigrams <- as.character(low_descr_tfidf$bigram[1:5000])
+
+descr_names <- unique(c(high_bigrams, medium_bigrams, low_bigrams))
+#ran into an issue with duplicate bigrams within the description. I used unique to remove duplicates. 
+train2 <- data.frame(matrix(ncol=length(descr_names), nrow=nrow(train2)))
+colnames(train2) <- descr_names
+train2 <- cbind(train[,c('listing_id', 'interest_level', 'price', 'binary_photos', 'bedrooms', 'bathrooms', 'hour', 'building_id', 'manager_id')], train2)
+
+for(i in 10:length(train2)){
+  train2[, i] <- ifelse(grepl(colnames(train2)[i],train$add_descr) == TRUE, 1, 0) 
+}
 ```
 
 ```{r chi-square test}
@@ -299,19 +333,19 @@ tapply(train$price, train$interest_level, summary)
 #So people are more interested the lower the price.
 
 #' How does price and interest_level relate to listing location?
+pb <- data.frame(table(train$price, train$building_id))
 ```
 
 ```{r bedrooms}
+boxplot(bedrooms~interest_level, data=train)
 ```
 
 ```{r longitude and latitude}
 #Fix graph, not showing enough points
 
 #' What is the lat/long for listings by interest_level? Are there clusters of regions by interest_level?
-aggregate
-length(table(train$building_id))
-
-ggplot(train, aes(longitude, latitude, color=interest_level)) + geom_point() + geom_jitter(width=1)
+ggplot(train, aes(longitude, latitude, color=interest_level)) + geom_point(alpha=0.5) + geom_jitter(width=15)
+#No so using longitude and latitude will not be beneficial, there's no real differentiation of points. And the 0,0 points are missing.
 ```
 
 ```{r photos}
@@ -333,26 +367,29 @@ manager_feels <- manager_feels[manager_feels$freq != 0, ]
 mean(manager_feels$freq)
 #Mean frequency for a manager is 8.6. Consider managers who have frequencies of 9 or greater.
 manager_feels <- manager_feels[manager_feels$freq >= 9, ]
-table(as.character(manager_feels$manager_id)) #use melt now? want to see how many frequency for each interest_level by manager_id.
+#how to see frequency for each interest_level by manager_id?
 ```
 
 ```{r bathrooms}
+boxplot(bathrooms~interest_level, data=train[train$price < 80000,])
+#basically all have 1 bathroom
 ```
 
 ```{r building id}
-#Q: Are building ids unique to property managers/co? (check last bit of description again building ids to see there are multiple companies in one building)
+#Q: Are building ids unique to property managers/co?
+bm <- data.frame(table(train$building_id, train$manager_id))
+bm %>% 
+  filter(Var1 == 1) %>% 
+  View()
+#No, one building can have numerous units with different managers.
 
 #' Are there more/less desirable buildings?
 building_feels <- data.frame(table(train$building_id, train$interest_level))
 names(building_feels) <- c('building_id', 'interest_level', 'freq')
 building_feels <- building_feels[building_feels$freq != 0, ]
 mean(building_feels$freq)
-#Mean frequency for a manager is 4.4. Consider managers who have frequencies of 5 or greater.
-building_feels <- building_feels[building_feels$freq >= 5, ]
-#building id of 0 seems to be an input error?
-table(as.character(manager_feels$manager_id))
-
-#' Are there different interest levels per building id?
+#Mean frequency for a manager is 3.68. Consider managers who have frequencies of 4 or greater.
+building_feels <- building_feels[building_feels$freq >= 4, ]
 ```
 
 ```{r street address}
@@ -361,66 +398,186 @@ streets <- table(train$display_address)
 head(streets[order(streets, decreasing = T)])
 #' Broadway, East 34th Street, Second Ave
 
-#' What is the relationship btw building # (first word in street address) and building id?
+#' What is the relationship btw street address and building id?
+View(data.frame(train$street_address, train$building_id))
+#for many street addresses, the same address corresponds to the same building id. Some discrepancies occur from missing building_id or street address that include apt. no.
+id2street <- paste(train$street_address, train$building_id, sep=" ")
+View(table(id2street)) #checking with bigrams
 
 #' What is the frequency of street addresses by interest level?
+View(table(train$street_address, train$interest_level))
+#505 west 37th street mostly appears in low interest listings (114)
 ```
 
 ```{r features}
+#' Do no features translate to low interest?
+table(train$interest_level[train$features == ''])
+#' Yes 65% of the time.
+
 #' What are typical features offered? By interest_level?
 #Hardwood Floors are the most frequent feature of high interest listings occurring 1986 times. Assuming the feature does not occur multiple times in the same listing that comprises, 51.7% of high interest listing.
+high_feat_char <- paste(train$feat_fix[train$interest_level=='high'], sep=" ")
+high_feat_word <- unlist(strsplit(high_feat_char, " "))
+high_feat_word <- trim(high_feat_word)
+high_feat_word <-  high_feat_word[high_feat_word != ""]
+high_feat_dat <- data.frame(`bigram` = ngram_maker(high_feat_word, 2L), `n` = rep(1, 36504))
+high_feat_dat <- setNames(aggregate(high_feat_dat$n, by=list(high_feat_dat$bigram), FUN='sum'), c('bigram', 'n'))
+high_feat_dat$total <- rep(sum(high_feat_dat$n), nrow(high_feat_dat))
+high_feat_dat$`interest_level` <- rep('high', nrow(high_feat_dat))
 
-high_feat_char <- paste(train$features[train$interest_level=='high'], sep=" ")
-high_feat_dat <- data.frame(`word` = unlist(strsplit(high_feat_char, " ")), `n` = rep(1, 36600))
-high_feat_dat$word <- trim(high_feat_dat$word)
-high_feat_dat <- setNames(aggregate(high_feat_dat$n, by=list(high_feat_dat$word), FUN='sum'), c('word', 'n'))
-high_descr_dat <- high_descr_dat[-1,]
-high_descr_dat$total <- rep(sum(high_descr_dat$n), nrow(high_descr_dat))
-high_descr_dat$`interest_level` <- rep('high', nrow(high_descr_dat))
+medium_feat_char <- paste(train$feat_fix[train$interest_level=='medium'], sep=" ")
+medium_feat_word <- unlist(strsplit(medium_feat_char, " "))
+medium_feat_word <- trim(medium_feat_word)
+medium_feat_word <-  medium_feat_word[medium_feat_word != ""]
+medium_feat_dat <- data.frame(`bigram` = ngram_maker(medium_feat_word, 2L), `n` = rep(1, 120435))
+medium_feat_dat <- setNames(aggregate(medium_feat_dat$n, by=list(medium_feat_dat$bigram), FUN='sum'), c('bigram', 'n'))
+medium_feat_dat$total <- rep(sum(medium_feat_dat$n), nrow(medium_feat_dat))
+medium_feat_dat$`interest_level` <- rep('medium', nrow(medium_feat_dat))
 
-medium_descr_char <- paste(train$description[train$interest_level=='medium'], sep=" ")
-medium_descr_dat <- data.frame(`word` = unlist(strsplit(medium_descr_char, " ")), `n` = rep(1, 650654))
-medium_descr_dat$word <- trim(medium_descr_dat$word)
-medium_descr_dat <- setNames(aggregate(medium_descr_dat$n, by=list(medium_descr_dat$word), FUN='sum'), c('word', 'n'))
-medium_descr_dat <- medium_descr_dat[-c(1:3),]
-medium_descr_dat$total <- rep(sum(medium_descr_dat$n), nrow(medium_descr_dat))
-medium_descr_dat$`interest_level` <- rep('medium', nrow(medium_descr_dat))
+low_feat_char <- paste(train$feat_fix[train$interest_level=='low'], sep=" ")
+low_feat_word <- unlist(strsplit(low_feat_char, " "))
+low_feat_word <- trim(low_feat_word)
+low_feat_word <-  low_feat_word[low_feat_word != ""]
+low_feat_dat <- data.frame(`bigram` = ngram_maker(low_feat_word, 2L), `n` = rep(1, 318810))
+low_feat_dat <- setNames(aggregate(low_feat_dat$n, by=list(low_feat_dat$bigram), FUN='sum'), c('bigram', 'n'))
+low_feat_dat$total <- rep(sum(low_feat_dat$n), nrow(low_feat_dat))
+low_feat_dat$`interest_level` <- rep('low', nrow(low_feat_dat))
 
-low_descr_char <- paste(train$description[train$interest_level=='low'], sep=" ")
-low_descr_dat <- data.frame(`word` = unlist(strsplit(low_descr_char, " ")), `n` = rep(1, 1876085))
-low_descr_dat$word <- trim(low_descr_dat$word)
-low_descr_dat <- setNames(aggregate(low_descr_dat$n, by=list(low_descr_dat$word), FUN='sum'), c('word', 'n'))
-low_descr_dat <- low_descr_dat[-c(1:2),]
-low_descr_dat$total <- rep(sum(low_descr_dat$n), nrow(low_descr_dat))
-low_descr_dat$`interest_level` <- rep('low', nrow(low_descr_dat))
+feat_dat <- rbind(high_feat_dat, medium_feat_dat)
+feat_dat <- rbind(feat_dat, low_feat_dat)
 
-descr_dat <- rbind(high_descr_dat, medium_descr_dat)
-descr_dat <- rbind(descr_dat, low_descr_dat)
-
-ggplot(descr_dat, aes(n/total, fill = interest_level)) +
+ggplot(feat_dat, aes(n/total, fill = interest_level)) +
   geom_histogram(show.legend = FALSE) +
   xlim(NA, 0.0009) +
   facet_wrap(~interest_level, ncol = 2, scales = "free_y")
 
-descr_dat <- descr_dat %>% 
-  bind_tf_idf(word, interest_level, n)
+feat_dat <- feat_dat %>% 
+  bind_tf_idf(bigram, interest_level, n)
 #other package to set weight for if_idf?
 
-descr_dat %>%
+high_feat_tfidf <- feat_dat %>%
+  filter(`interest_level` == 'high') %>% 
+  arrange(desc(tf_idf)) 
+
+medium_feat_tfidf <- feat_dat %>%
   filter(`interest_level` == 'medium') %>% 
-  select(-total) %>%
-  arrange(desc(tf_idf)) %>% 
-  View()
+  arrange(desc(tf_idf)) 
 
-test <- 'dining room, doorman, elevator, pre-war - & /'
-gsub(" [[:punct:]]", " ", test)
+low_feat_tfidf <- feat_dat %>%
+  filter(`interest_level` == 'low') %>% 
+  arrange(desc(tf_idf)) 
 
-#' Do no features translate to low interest?
-table(train$interest_level[train$features == ''])
-#' Yes 65% of the time.
+feath_bigrams <- as.character(high_feat_tfidf$bigram[1:117])
+featm_bigrams <- as.character(medium_feat_tfidf$bigram[1:117])
+featl_bigrams <- as.character(low_feat_tfidf$bigram[1:117])
+
+feat_names <- unique(c(paste('f', feath_bigrams, sep= " "), paste('f', featm_bigrams, sep=" "), paste('f', featl_bigrams, sep=" ")))
+#ran into an issue with duplicate bigrams within the features. I used unique to remove duplicates. Also I added 'f' to distinguish feature bigrams from description bigrams.
+
+feat_bigrams <- data.frame(matrix(ncol=length(feat_names), nrow=nrow(train2)))
+train2 <- cbind(train2, feat_bigrams)
+
+for(i in 15010:15347){
+  train2[, i] <- ifelse(grepl(str_sub(colnames(train2)[i], 3), train$feat_fix) == TRUE, 1, 0) 
+}
 ```
 
 # Step 2: Conclusions from Exploratory Data Analysis
 
+dt <- table(manager_feels)
+# 2. Graph
+balloonplot(dt, main ="manager interest levels", xlab ="", ylab="", label = FALSE, show.margins = FALSE)
+
+library(corrplot)
+corrplot(chisq$residuals, is.cor = FALSE)
 
 # Step 3: Statistical Learning Methods
+
+```{r random forest}
+require(rpart)
+require(ISLR)
+require(e1071)
+require(gbm)
+
+set.seed(357)
+train2.tr <- sample_frac(train2, 0.7)
+train2.vd <- anti_join(train2, train2.tr)
+
+classRF = randomForest(interest_level ~ . -listing_id, data=train2, ntree = 500, importance = TRUE)
+#leave terminal node size as 1.
+
+print(mean((predict(classRF, train2[,-c(1:2)]) - train2[,2] )^2))
+
+tuneRF #to find optimal parameters
+
+# Random forests are one of the most successful off the shelf methods, often giving good results with very little work required. There are many tuning parameters, such as the number of trees (well actually the more the better), the depth of the trees, how many variables to consider at each split ect. But in general these can be searched over pretty coarsely and still get good results. One of the disadvantages is it is much harder to interpret the role of different variables. However you can still get a measure of variable importance. 
+
+regRF$importance
+
+# This is measured by permuting the values of each predictor for the data one at a time, and seeing how this changes the accuracy of the tree. High IncMSE values imply that the variable is important, and low ones imply it is not. 
+```
+
+```{r other}
+# Bagging and random forest are just two specific cases of ensembling models, where you take different models, and combine their outputs to get your final prediction. This generally produces an improvement over the models individually as long as the individual models are doing equally well. 
+
+regSVM = svm(mpg ~ ., data = Auto, kernel = 'radial', cost = 10, gamma = 1)
+
+print(mean((predict(regSVM, Auto[,-1]) - Auto[,1] )^2))
+print(mean((predict(regRF, Auto[,-1]) - Auto[,1] )^2))
+
+print(mean(( 0.5*(predict(regRF, Auto[,-1]) + predict(regSVM, Auto[,-1])) - Auto[,1] )^2)) #better MSE by taking the average of the two (but generally the two methods must be decent on their own to see an improvement in the combination)
+
+#############################################################################
+
+# Boosting
+
+# Final boosting is similar to the methods we have seen already, except while in bagging we wanted our learners to be independent, in boosting we want our learners to be strongly dependent on each other. In boosting we learn sequentially, where the next tree is fit on the residuals of the last one (ie its errors). We then add all the learners together. This slowly builds a complex learner, and tends to do a good job of not overfitting. (If we factor in a shrinkage factor [weigh the later models less] then we can prevent overfitting to the hard to fit points)
+
+regBoost = gbm(mpg ~ ., data = Auto, distribution = 'gaussian', n.trees = 10000, interaction.depth = 3)
+summary(regBoost)
+
+print(mean(( predict(regBoost, Auto[,-1], n.trees = 10000) - Auto[,1] )^2))
+
+set.seed(1)
+
+folds = 5
+
+foldID = rep(1:folds, length.out = nrow(Auto))
+foldID = sample(foldID) # permuting our set
+
+CVmse = matrix(nrow = 3, ncol = folds)
+
+for(i in 1:folds){
+  
+  train = Auto[which(foldID != i),]
+
+  
+  testX = Auto[which(foldID == i),-1]
+  testY = Auto[which(foldID == i),1]
+  
+  tempSVM = svm(mpg ~ ., data = train, kernel = 'radial', cost = 10, gamma = 1)
+  CVmse[1,i] = mean((predict(tempSVM,testX) - testY)^2)
+  
+  tempRF = randomForest(mpg ~ ., data = train, ntree = 500, importance = TRUE, nodesize = 2)
+  CVmse[2,i] = mean((predict(tempRF,testX) - testY)^2)
+  
+  tempBoost = gbm(mpg ~ ., data = train, distribution = 'gaussian', n.trees = 10000, interaction.depth = 3)
+  CVmse[3,i] = mean((predict(tempBoost,testX, n.trees = 10000) - testY)^2)
+    
+}
+
+View(CVmse)
+
+# This suggests that the SVM was overfitting the data a lot, and the RF and boosting trees were not overfitting as much. This is often an advantage of these ensemble algorithms which use many weak learners. They can avoid overfitting more than using a complex model like an SVM. 
+
+```
+
+```{r misc code}
+pattern11c <- "(?!('|/|-))[[:punct:]]"
+descr_fix  <- gsub(pattern11c, " ", descr_fix, perl=TRUE)
+
+## (l) Remove tab characters
+pattern12 <- "\t+"
+line <- '\tg\t\t122hhh'
+descr_fix <- str_replace_all(descr_fix, pattern12, "")
+```
