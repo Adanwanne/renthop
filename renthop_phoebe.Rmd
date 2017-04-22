@@ -1,5 +1,5 @@
 ---
-title: "rent hop"
+title: "Stats415 Project - Renthop"
 author: "Adaeze Ajoku and Phoebe Liang"
 date: "4/18/2017"
 output: html_document
@@ -12,26 +12,23 @@ library(stringr)
 setwd('/Users/Phoebe/Documents/Winter2017_Courses/STATS415/renthop')
 renthop.tr <- read.csv('renthop_tr.csv', header=TRUE)
 
+renthop.tr <- data.frame(renthop.tr)
+
+renthop <- renthop.tr[, c("listing_id", "created", "features", "new_display_address", "description", "bedrooms", "bathrooms", "price", "manager_id", "building_id", "photo_count", "photo_binary", "month", "new_interest_level")]
+
 #renthop.te <- read.csv('/Users/Phoebe/Documents/Winter2017_Courses/STATS415/renthop_te.csv')
 ```
 
 # Step 0: Preparing the Data
-```{r data cleaning}
-# (1) Remove the brackets
-tofix = c(2:5, 9:10, 13:15)
-entry_fix <- function(x){
-  str_sub(x, 2, -2)
-}
-train <- data.frame(renthop.tr[,-tofix], apply(renthop.tr[,tofix], 2, entry_fix))
-train <- train[,c(1, 7:10, 2:4, 11:12, 5:6, 13:15)]
-
-# (2) Make everything lowercase
-text2lower <-  c("display_address", "description", "street_address", "features")   
-train[,text2lower] <- sapply(train[,text2lower], tolower) 
-
-# (3) Remove un-needed factors
-train$description <- as.character(train$description)
-train$features <- as.character(train$features)
+```{r save training data}
+# (1) renthop
+colnames(renthop)[ncol(renthop)] <- "interest_level"
+colnames(renthop)[4] <- "display_address"
+renthop$manager_id <- as.factor(renthop$manager_id)
+renthop$building_id <- as.factor(renthop$building_id)
+renthop$listing_id <- as.factor(renthop$listing_id)
+# convert factor variable to datetimeobject. need to conver to character first
+renthop$created <- strptime(x = as.character(renthop$created),format = "%d/%m/%Y %H:%M")
 
 # (4) Create a numeric variable for 'photos'
 train$photos <- ifelse(str_count(train$photos, ',') == 0, 0, str_count(train$photos, ',') + 1)
