@@ -202,6 +202,12 @@ labels, levels = pd.factorize(train_copy['new_building_id'])
 #print labels
 train_copy['building_id'] = labels
 
+##############################
+#@Author: Phoebe Liang
+#Date: 4/24/17
+##############################
+
+
 # Change building_id to Integer-Levels
 labels2, levels2 = pd.factorize(train_copy['new_manager_id'])
 #print labels
