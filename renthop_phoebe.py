@@ -104,6 +104,7 @@ for index, row in train_copy['created'].iteritems():
 train_copy['created'] = date_list
 train_copy['created'] = pd.to_datetime(train_copy['created'])
 train_copy['month'] = train_copy['created'].dt.month
+train_copy['hour'] = train_copy['created'].dt.hour
 
 # Display Address 
 address = []
@@ -207,6 +208,58 @@ labels2, levels2 = pd.factorize(train_copy['new_manager_id'])
 train_copy['manager_id'] = labels2
 
 train_copy.to_csv('renthop_tr.csv', index=False)
+
+import nltk
+from nltk.corpus import stopwords
+from stemming.porter2 import stem
+from sklearn.model_selection import GridSearchCV
+
+def text_to_words(line):  
+    text = line.split() 
+    stops = set(stopwords.words("english"))                  
+    meaningful_words = [w for w in text if not w in stops and len(w)!=0]   
+    return( " ".join( meaningful_words ))
+
+data = []
+for i in xrange(0, num_line):
+    data.append(text_to_words(train_text[i]))
+print ("second step is done")
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer
+vectorizer = TfidfVectorizer(max_features=5000, use_idf=True, ngram_range=(1, 2))
+X_train = vectorizer.fit_transform(data)
+
+feature_names = vectorizer.get_feature_names()
+
+from sklearn.feature_selection import SelectKBest, chi2
+ch2 = SelectKBest(chi2, k="all")
+X_train = ch2.fit_transform(X_train, train_label)
+
+if feature_names:
+# keep selected feature names
+     feature_names = [feature_names[i] for i in ch2.get_support(indices=True)]
+    
+train_features_one = train_copy[['bedrooms', 'bathrooms', 'building_id',
+       'manager_id', 'hour', 'price', 'photo_binary']].values
+
+train_features_two = X_train.toarray()
+
+import numpy
+#Stack arrays in sequence horizontally (column wise).
+train_features = numpy.hstack((train_features_one, train_features_two))
+print train_features.shape
+#print train_features
+
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.model_selection import cross_val_score
+forest = RandomForestClassifier(n_estimators = 10, random_state=1) 
+multi_forest = OneVsRestClassifier(forest)
+
+scores = cross_val_score(multi_forest, train_features, train_label_adj, cv=5, scoring='accuracy')
+print scores.mean()
+
+
 
 
 
